@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { ChangeOrderActions } from "@/components/ChangeOrderActions";
+import { Composer } from "@/components/Composer";
 import { ResetDemo } from "@/components/ResetDemo";
+import type { ActivityActor, ActivityEvent } from "@/domain/activity";
 import { formatShortDate } from "@/domain/dates";
 import { formatUsd } from "@/domain/money";
 import { segmentBody, type BodySegment } from "@/domain/segments";
@@ -9,7 +11,9 @@ import type { FindingWithOrder, ThreadMessage, WorkspaceData } from "@/domain/wo
 
 export interface WorkspaceProps {
   data: WorkspaceData;
+  activity: readonly ActivityEvent[]; // oldest first
   sendBlockedReason: string | null; // set when this server has no PayPal keys, so sending and cancelling are off
+  reviewBlockedReason: string | null; // set when this server has no Claude key, so checking a message is off
 }
 
 const statusText: Record<ChangeOrderStatus, string> = {
@@ -50,7 +54,7 @@ function statusLine(order: ChangeOrder): string {
 const moreDays = (days: number) => `about ${days} more ${days === 1 ? "day" : "days"}`;
 
 // The whole screen is rendered on the server from the database; only the action forms run in the browser.
-export function Workspace({ data, sendBlockedReason }: WorkspaceProps) {
+export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReason }: WorkspaceProps) {
   const { project, totals } = data;
   const client = data.messages.find((m) => m.from === "client")?.author ?? project.clientName;
 
@@ -93,10 +97,13 @@ export function Workspace({ data, sendBlockedReason }: WorkspaceProps) {
               <MessageRow key={m.id} message={m} sendBlockedReason={sendBlockedReason} />
             ))}
           </ol>
-          <Composer client={client} />
+          <Composer client={client} blockedReason={reviewBlockedReason} />
         </section>
 
-        <ScopePanel data={data} />
+        <div className="space-y-6">
+          <ScopePanel data={data} />
+          <ActivityPanel activity={activity} />
+        </div>
       </main>
     </div>
   );
@@ -108,7 +115,7 @@ interface MessageRowProps {
 }
 
 function MessageRow({ message, sendBlockedReason }: MessageRowProps) {
-  // A finding without a change order isn't drawn at all (P4 decides how to show those).
+  // Every finding is stored with its change order; one without any isn't drawn.
   const quoted = message.findings.filter((f): f is FindingWithOrder & { order: ChangeOrder } => f.order !== null);
 
   return (
@@ -230,47 +237,6 @@ function MarginNote({ quote, reason, order, sendBlockedReason }: MarginNoteProps
   );
 }
 
-interface ComposerProps {
-  client: string;
-}
-
-// Message review arrives in P4; until then the box is shown with its button switched off.
-const CHECK_BLOCKED_REASON = "Scope checking isn't switched on yet, so nothing is sent to Claude.";
-
-function Composer({ client }: ComposerProps) {
-  return (
-    <div className="border-t border-rule bg-paper/50 px-5 py-6 sm:px-8">
-      <label htmlFor="incoming" className="text-sm font-semibold">
-        New message from {client}
-      </label>
-      <textarea
-        id="incoming"
-        aria-describedby="incoming-help check-blocked"
-        rows={3}
-        placeholder="Paste their latest email or chat message"
-        className="mt-2 block w-full max-w-[62ch] resize-y rounded-md border border-ink-soft bg-sheet px-3 py-2 font-serif text-[17px] leading-relaxed placeholder:text-ink-soft"
-      />
-      <div className="mt-3 flex max-w-[62ch] flex-wrap items-center justify-between gap-3">
-        <p id="incoming-help" className="text-sm text-ink-soft">
-          Claude compares it with scope version 1.
-        </p>
-        {/* aria-disabled, not disabled: keyboard and screen reader users can still reach it and hear why. */}
-        <button
-          type="button"
-          aria-disabled="true"
-          aria-describedby="check-blocked"
-          className="min-h-11 rounded-md bg-ink px-4 text-sm font-semibold text-sheet aria-disabled:cursor-not-allowed aria-disabled:bg-rule aria-disabled:text-ink-soft"
-        >
-          Check scope
-        </button>
-      </div>
-      <p id="check-blocked" className="mt-2 max-w-[62ch] text-sm leading-relaxed text-ink-soft">
-        {CHECK_BLOCKED_REASON}
-      </p>
-    </div>
-  );
-}
-
 interface ScopePanelProps {
   data: WorkspaceData;
 }
@@ -279,7 +245,7 @@ function ScopePanel({ data }: ScopePanelProps) {
   const { project, scopeItems, changeOrders, totals } = data;
 
   return (
-    <section aria-labelledby="scope-title" className="rounded-md border border-rule bg-sheet px-5 py-6 lg:sticky lg:top-6">
+    <section aria-labelledby="scope-title" className="rounded-md border border-rule bg-sheet px-5 py-6">
       <h2 id="scope-title" className="font-serif text-[22px]">
         Scope
       </h2>
@@ -323,6 +289,41 @@ function ScopePanel({ data }: ScopePanelProps) {
           <dd>{formatUsd(totals.totalCents)}</dd>
         </div>
       </dl>
+    </section>
+  );
+}
+
+const actorText: Record<ActivityActor, string> = {
+  app: "Tollgate",
+  claude: "Claude",
+  paypal: "PayPal",
+};
+
+interface ActivityPanelProps {
+  activity: readonly ActivityEvent[];
+}
+
+// What happened, in order. It only explains: nothing here can start a PayPal call.
+function ActivityPanel({ activity }: ActivityPanelProps) {
+  return (
+    <section aria-labelledby="activity-title" className="rounded-md border border-rule bg-sheet px-5 py-6" data-testid="activity-panel">
+      <h2 id="activity-title" className="font-serif text-[22px]">
+        Activity
+      </h2>
+      <p className="text-sm text-ink-soft">Claude proposes. Nothing reaches PayPal until you press a button.</p>
+      {activity.length === 0 ? (
+        <p className="mt-4 border-t border-rule pt-3 text-sm leading-relaxed text-ink-soft">
+          Nothing yet. Check a message or send a change order, and each step shows up here.
+        </p>
+      ) : (
+        <ol className="mt-4 divide-y divide-rule border-y border-rule">
+          {activity.map((event) => (
+            <li key={event.id} className="py-2.5 text-sm leading-relaxed" data-kind={event.kind}>
+              <span className="font-semibold">{actorText[event.actor]}</span> {event.summary}
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
 }

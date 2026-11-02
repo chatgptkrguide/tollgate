@@ -2,13 +2,16 @@ import { connection } from "next/server";
 import { Suspense, type ReactElement } from "react";
 import { Workspace } from "@/components/Workspace";
 import { WorkspaceSkeleton } from "@/components/WorkspaceSkeleton";
+import { listActivity } from "@/server/db/activity";
 import { getDb } from "@/server/db/client";
 import { openVisitorWorkspace } from "@/server/db/queries";
+import { env } from "@/server/env";
 import { paypalConfig } from "@/server/paypal/token";
 import { readVisitorId } from "@/server/session";
 
 // Without sandbox keys (a judge running it locally, the phase 1 browser tests) sending stays off and says why.
 const SEND_BLOCKED_REASON = "PayPal sandbox keys aren't set on this server, so nothing can be sent.";
+const REVIEW_BLOCKED_REASON = "Claude isn't set up on this server, so messages can't be checked.";
 
 export default function Home() {
   return (
@@ -26,8 +29,17 @@ async function VisitorWorkspace(): Promise<ReactElement> {
   // Everything below needs a real request: the clock, random ids, and the copy's database writes.
   await connection();
 
-  const data = await openVisitorWorkspace(getDb(), visitorId, new Date());
-  return <Workspace data={data} sendBlockedReason={paypalConfig() ? null : SEND_BLOCKED_REASON} />;
+  const db = getDb();
+  const data = await openVisitorWorkspace(db, visitorId, new Date());
+  const activity = await listActivity(db, data.project.id);
+  return (
+    <Workspace
+      data={data}
+      activity={activity}
+      sendBlockedReason={paypalConfig() ? null : SEND_BLOCKED_REASON}
+      reviewBlockedReason={env().ANTHROPIC_API_KEY ? null : REVIEW_BLOCKED_REASON}
+    />
+  );
 }
 
 // Only when the request skipped proxy.ts, so it has no visitor cookie yet.

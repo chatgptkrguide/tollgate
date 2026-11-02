@@ -36,6 +36,13 @@
       "when": 1793419977612,
       "tag": "0004_send_log_and_webhook_outcome",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793603301070,
+      "tag": "0005_claude_calls",
+      "breakpoints": true
     }
   ]
 }

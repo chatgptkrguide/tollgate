@@ -13,14 +13,14 @@ export default defineConfig({
   retries: 0,
   use: { channel: "chrome", headless: true },
   projects: [
-    { name: "no-paypal", testMatch: /(smoke|p1)\.spec\.ts/, use: { baseURL: `http://localhost:${NO_PAYPAL_PORT}` } },
+    { name: "no-paypal", testMatch: /(smoke|p1|p4)\.spec\.ts/, use: { baseURL: `http://localhost:${NO_PAYPAL_PORT}` } },
     { name: "paypal", testMatch: /p2.*\.spec\.ts/, use: { baseURL: `http://localhost:${PAYPAL_PORT}` } },
   ],
   webServer: [
     {
       command: `rm -f data/e2e.db && pnpm start --port ${NO_PAYPAL_PORT}`,
       url: `http://localhost:${NO_PAYPAL_PORT}`,
-      env: { DATABASE_URL: "file:data/e2e.db", PAYPAL_CLIENT_ID: "", PAYPAL_CLIENT_SECRET: "", PAYPAL_WEBHOOK_ID: "" },
+      env: { DATABASE_URL: "file:data/e2e.db", PAYPAL_CLIENT_ID: "", PAYPAL_CLIENT_SECRET: "", PAYPAL_WEBHOOK_ID: "", ANTHROPIC_API_KEY: "" },
       reuseExistingServer: false,
       timeout: 120_000,
     },

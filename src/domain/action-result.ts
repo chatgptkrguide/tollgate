@@ -36,3 +36,11 @@ export const PAYPAL_ACTION_ERRORS = [
 ] as const;
 export type PayPalActionError = (typeof PAYPAL_ACTION_ERRORS)[number];
 export type BillingActionResult = { ok: true } | { ok: false; error: ActionError | PayPalActionError };
+
+// Answers from reviewing a message. marked: how many requests Claude marked as outside the scope (0 is a good answer).
+// too_long: over MAX_REVIEW_MESSAGE_CHARS · not_configured: this server has no Claude key · rate_limited: the copy's or
+// the server's cap is reached, so Claude wasn't called · claude_unavailable: Claude didn't answer or its answer couldn't
+// be used · claude_refused: Claude declined the message. In every failure nothing was stored, so the text can be sent again.
+export const REVIEW_ACTION_ERRORS = ["too_long", "not_configured", "rate_limited", "claude_unavailable", "claude_refused"] as const;
+export type ReviewActionError = (typeof REVIEW_ACTION_ERRORS)[number];
+export type ReviewActionResult = { ok: true; marked: number } | { ok: false; error: ActionError | ReviewActionError };

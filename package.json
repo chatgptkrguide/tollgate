@@ -14,9 +14,11 @@
     "db:migrate": "tsx scripts/db.mts",
     "db:seed": "tsx scripts/db.mts --seed",
     "e2e": "next build && playwright test",
-    "accept:sandbox": "vitest run --config vitest.sandbox.config.ts --passWithNoTests"
+    "accept:sandbox": "vitest run --config vitest.sandbox.config.ts --passWithNoTests",
+    "eval:review": "tsx scripts/eval-review.mts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@libsql/client": "^0.18.0",
     "drizzle-orm": "^0.45.4",
     "next": "16.4.2",

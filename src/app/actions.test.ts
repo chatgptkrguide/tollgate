@@ -9,7 +9,7 @@ import { runMigrations } from "@/server/db/migrate";
 import { changeOrders, projects } from "@/server/db/schema";
 import { PayPalError } from "@/server/paypal/errors";
 import { newVisitorId, VISITOR_COOKIE } from "@/server/visitor";
-import { cancelChangeOrder, checkPayment, requoteChangeOrder, resetDemo, sendChangeOrder, waiveChangeOrder } from "./actions";
+import { cancelChangeOrder, checkPayment, requoteChangeOrder, resetDemo, reviewMessage, sendChangeOrder, waiveChangeOrder } from "./actions";
 
 // Only the framework edges are replaced: the request's cookies, the router refresh, which database to use,
 // and which PayPal to talk to (a stand-in; the real one is never called from unit tests).
@@ -552,5 +552,36 @@ describe("서버 액션: 발송·취소·다시 견적", () => {
 
     expect(result).toEqual({ ok: false, error: "not_found" });
     expect(reads).toEqual([]);
+  });
+});
+
+describe("메시지 검토 액션", () => {
+  beforeEach(async () => {
+    request.cookies.clear();
+    request.db = createDb("file::memory:");
+    await runMigrations(request.db);
+    vi.mocked(refresh).mockClear();
+  });
+
+  const form = (message: string | null) => {
+    const data = new FormData();
+    if (message !== null) data.set("message", message);
+    return data;
+  };
+
+  it("쿠키가 없으면 not_found", async () => {
+    expect(await reviewMessage(null, form("Add a blog?"))).toEqual({ ok: false, error: "not_found" });
+  });
+
+  it("글이 없으면 invalid_input", async () => {
+    expect(await reviewMessage(null, form(null))).toEqual({ ok: false, error: "invalid_input" });
+  });
+
+  it("키가 없는 서버는 not_configured", async () => {
+    const visitorId = newVisitorId();
+    await ensureDemoCopy(request.db as Db, visitorId, new Date());
+    request.cookies.set(VISITOR_COOKIE, visitorId);
+    expect(await reviewMessage(null, form("Add a blog?"))).toEqual({ ok: false, error: "not_configured" });
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

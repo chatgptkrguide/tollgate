@@ -2,12 +2,13 @@
 
 import { refresh } from "next/cache";
 import { z } from "zod";
-import type { ActionResult, BillingActionResult, ResetActionResult } from "@/domain/action-result";
+import type { ActionResult, BillingActionResult, ResetActionResult, ReviewActionResult } from "@/domain/action-result";
 import { cancelOwnedChangeOrder, liveBillingDeps, requoteOwnedChangeOrder, sendOwnedChangeOrder } from "@/server/billing";
 import { waiveOwnedChangeOrder } from "@/server/db/change-orders";
 import { checkOwnedPayment } from "@/server/payments";
 import { getDb } from "@/server/db/client";
 import { resetDemoCopy } from "@/server/db/demo";
+import { liveReviewDeps, reviewOwnedMessage } from "@/server/review";
 import { currentProjectId } from "@/server/session";
 
 // Anyone can POST to these, so each one reads only the id it needs, checks it, and takes the owner
@@ -134,5 +135,26 @@ export async function checkPayment(_prev: BillingActionResult | null, formData: 
     return { ok: false, error: "server_error" };
   }
   if (result.ok) refresh();
+  return result;
+}
+
+// Sends a pasted client message to Claude and stores what it marks as draft change orders. The form carries only the
+// text: the project comes from the cookie, the prices from its rate. A failed review also refreshes the page, so the
+// activity panel shows it.
+export async function reviewMessage(_prev: ReviewActionResult | null, formData: FormData): Promise<ReviewActionResult> {
+  const message = formData.get("message");
+  if (typeof message !== "string") return { ok: false, error: "invalid_input" };
+
+  const ownerProjectId = await currentProjectId();
+  if (!ownerProjectId) return { ok: false, error: "not_found" };
+
+  let result: ReviewActionResult;
+  try {
+    result = await reviewOwnedMessage(liveReviewDeps(), ownerProjectId, message);
+  } catch (error) {
+    console.error("reviewing a message failed", error);
+    return { ok: false, error: "server_error" };
+  }
+  if (result.ok || result.error === "claude_unavailable" || result.error === "claude_refused") refresh();
   return result;
 }
