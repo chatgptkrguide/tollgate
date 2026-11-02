@@ -1,4 +1,4 @@
-import Anthropic, { AnthropicError, APIError } from "@anthropic-ai/sdk";
+import Anthropic, { APIError } from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { FindingDraft } from "../../domain/finding";
@@ -61,9 +61,16 @@ export interface ScopeReviewer {
 
 const bulletList = (items: readonly string[]) => (items.length ? items.map((item) => `- ${item}`).join("\n") : "(none)");
 
+const PROMPT_TAG = /<\s*(\/?)\s*(project|agreed_scope|change_orders_already_quoted|client_message)\b[^>]*>/gi;
+
+// Text from the client (and titles the model wrote earlier) can't open or close the prompt's own sections and pose as
+// the app, in any spelling. Only the prompt changes, not the stored text.
+export function neutralizeTags(text: string): string {
+  return text.replace(PROMPT_TAG, (_tag, slash: string, name: string) => `[${slash}${name}]`);
+}
+
 export function reviewPrompt(input: ReviewInput): string {
-  // The message can't close its own tag and pose as the app. Only the prompt changes, not the stored text.
-  const message = input.message.replaceAll("</client_message>", "<\\/client_message>");
+  const message = neutralizeTags(input.message);
   return `<project>${input.projectTitle} for ${input.clientName}</project>
 
 <agreed_scope>
@@ -71,7 +78,7 @@ ${bulletList(input.scopeItems)}
 </agreed_scope>
 
 <change_orders_already_quoted>
-${bulletList(input.quotedChangeOrders)}
+${bulletList(input.quotedChangeOrders.map((title) => neutralizeTags(title.replace(/\s+/g, " "))))}
 </change_orders_already_quoted>
 
 <client_message>
@@ -112,11 +119,9 @@ export function createScopeReviewer(client: Pick<Anthropic, "beta">): ScopeRevie
           console.error("Claude review failed", { status: error.status ?? null, requestId: error.requestID ?? null });
           return { ok: false, reason: "unavailable" };
         }
-        if (error instanceof AnthropicError) {
-          console.error("Claude review answer couldn't be read");
-          return { ok: false, reason: "unusable" };
-        }
-        throw error;
+        // Anything else came from reading the answer (the SDK's own error, or a parse error from the schema).
+        console.error("Claude review answer couldn't be read", { error: error instanceof Error ? error.name : typeof error });
+        return { ok: false, reason: "unusable" };
       }
     },
   };
@@ -127,6 +132,7 @@ let cached: ScopeReviewer | undefined;
 // The live reviewer, or null when this server has no key (the screen then says why the button is off).
 export function getScopeReviewer(apiKey: string | undefined): ScopeReviewer | null {
   if (!apiKey) return null;
-  cached ??= createScopeReviewer(new Anthropic({ apiKey, timeout: TIMEOUT_MS, maxRetries: 1 }));
+  // No retries: a retry is billed again but counted once under the caps, and the screen promises an answer within a minute.
+  cached ??= createScopeReviewer(new Anthropic({ apiKey, timeout: TIMEOUT_MS, maxRetries: 0 }));
   return cached;
 }

@@ -1,7 +1,7 @@
 import { and, asc, eq, ne } from "drizzle-orm";
 import type { ReviewActionResult } from "../domain/action-result";
 import type { NewActivityEvent } from "../domain/activity";
-import { locateFindings, type LocatedFinding } from "../domain/finding";
+import { locateFindings, type FindingDraft, type LocatedFinding } from "../domain/finding";
 import { extraDaysForHours, formatUsd, priceForHours } from "../domain/money";
 import { MAX_FINDINGS_PER_MESSAGE, MAX_REVIEW_MESSAGE_CHARS } from "../domain/review-limit";
 import { getScopeReviewer, type ReviewUsage, type ScopeReviewer } from "./ai/review";
@@ -29,6 +29,22 @@ const FAILURE_TEXT = {
 } as const;
 
 const QUOTE_SHOWN_CHARS = 80;
+const MAX_TITLE_CHARS = 80;
+const MAX_REASON_CHARS = 300;
+const MIN_HOURS = 0.25;
+
+const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
+const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+
+// The model's words go on invoices and back into later prompts, so they are made one short line each. Hours are kept to
+// two decimals, the precision prices are computed with, and anything under a quarter hour isn't a billable request.
+export function cleanDraft(draft: FindingDraft): FindingDraft | null {
+  const title = clip(oneLine(draft.title), MAX_TITLE_CHARS);
+  const reason = clip(oneLine(draft.reason), MAX_REASON_CHARS);
+  const estimatedHours = Math.round(draft.estimatedHours * 100) / 100;
+  if (!title || !reason || !(estimatedHours >= MIN_HOURS)) return null;
+  return { quote: draft.quote, title, reason, estimatedHours };
+}
 const shortQuote = (quote: string) => (quote.length > QUOTE_SHOWN_CHARS ? `${quote.slice(0, QUOTE_SHOWN_CHARS)}…` : quote);
 const hoursText = (hours: number) => `${hours} ${hours === 1 ? "hour" : "hours"}`;
 
@@ -103,7 +119,10 @@ export async function reviewOwnedMessage(deps: ReviewDeps, ownerProjectId: strin
   }
 
   // Model output is untrusted: only requests that quote the message exactly survive, priced from the rate.
-  const proposed = outcome.findings.slice(0, MAX_FINDINGS_PER_MESSAGE);
+  const proposed = outcome.findings
+    .slice(0, MAX_FINDINGS_PER_MESSAGE)
+    .map(cleanDraft)
+    .filter((d): d is FindingDraft => d !== null);
   const kept = locateFindings(body, proposed);
 
   const messageId = newId();

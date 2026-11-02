@@ -20,7 +20,7 @@ const errorText: Record<ActionError | ReviewActionError, string> = {
   server_error: "This couldn't be saved just now. Nothing changed; try again.",
   too_long: `That's longer than this demo checks (${MAX_REVIEW_MESSAGE_CHARS.toLocaleString("en-US")} characters). Paste the part with the requests.`,
   not_configured: "Claude isn't set up on this server, so the message wasn't checked.",
-  rate_limited: "This demo has checked as many messages as it may for now, so Claude wasn't called. Try again tomorrow.",
+  rate_limited: "This demo has checked as many messages as it may for now, so Claude wasn't called. Try again later.",
   claude_unavailable: "Claude couldn't review this just now. Nothing was saved, so you can try again.",
   claude_refused: "Claude declined to review this message. Nothing was saved.",
 };
@@ -37,8 +37,16 @@ function resultText(state: ReviewActionResult | null): string {
 export function Composer({ client, blockedReason }: ComposerProps) {
   const [text, setText] = useState("");
   const [state, formAction, pending] = useActionState(async (prev: ReviewActionResult | null, formData: FormData) => {
-    const result = await reviewMessage(prev, formData);
-    if (result.ok) setText("");
+    let result: ReviewActionResult;
+    try {
+      result = await reviewMessage(prev, formData);
+    } catch {
+      // The request never reached the server or its answer was lost: say so instead of breaking the page.
+      return { ok: false, error: "server_error" } satisfies ReviewActionResult;
+    }
+    // Text typed while Claude was reading is the visitor's next message; keep it.
+    const sent = formData.get("message");
+    if (result.ok) setText((current) => (current === sent ? "" : current));
     return result;
   }, null);
   const off = pending || blockedReason !== null;

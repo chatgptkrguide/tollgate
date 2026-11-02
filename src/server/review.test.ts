@@ -8,7 +8,7 @@ import { ensureDemoCopy, resetDemoCopy } from "./db/demo";
 import { runMigrations } from "./db/migrate";
 import { getWorkspace } from "./db/queries";
 import { changeOrders, findings, messages } from "./db/schema";
-import { reviewOwnedMessage, type ReviewDeps } from "./review";
+import { cleanDraft, reviewOwnedMessage, type ReviewDeps } from "./review";
 import { newVisitorId } from "./visitor";
 
 const NOW = new Date("2026-11-05T09:00:00.000Z");
@@ -80,6 +80,17 @@ describe("메시지 범위 검토", () => {
     answer({ ok: true, findings: [{ ...blog, estimatedHours: 10 }], usage });
     await reviewOwnedMessage(deps, projectId, BODY);
     expect((await listActivity(db, projectId))[2].summary).toContain("10 hours at $50 an hour is $500");
+  });
+
+  it("제목·이유는 한 줄로 줄이고, 시간은 소수 둘째 자리, 15분 미만과 빈 이유는 버린다", () => {
+    expect(cleanDraft({ ...blog, title: `  A\n\nblog ${"x".repeat(200)}`, reason: "Not\tin scope.\n", estimatedHours: 33.33333 })).toMatchObject({
+      title: expect.stringMatching(/^A blog x+…$/),
+      reason: "Not in scope.",
+      estimatedHours: 33.33,
+    });
+    expect(cleanDraft({ ...blog, title: "  A\n\nblog " + "x".repeat(200) })?.title).toHaveLength(80);
+    expect(cleanDraft({ ...blog, estimatedHours: 0.004 })).toBeNull();
+    expect(cleanDraft({ ...blog, reason: "  " })).toBeNull();
   });
 
   it("메시지에 없는 인용은 버리고 버린 수를 남긴다", async () => {
