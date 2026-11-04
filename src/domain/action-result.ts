@@ -19,6 +19,7 @@ export type ResetActionResult = { ok: true } | { ok: false; error: ResetError };
 // confirmed or saved here; pressing again checks and settles it
 // invoice_void: PayPal can't use this order's invoice any more (cancelled there), so the order is now cancelled
 // and can be quoted again · rate_limited: the server-wide send cap is reached, so PayPal wasn't called
+// copy_rate_limited: this copy's own send cap is reached (resetting it doesn't lift it), so PayPal wasn't called
 // not_paid_yet: PayPal doesn't show the invoice as paid in full · invoice_changed: PayPal's invoice has a different
 // reference, amount or currency than the order, so it wasn't marked paid
 export const PAYPAL_ACTION_ERRORS = [
@@ -31,6 +32,7 @@ export const PAYPAL_ACTION_ERRORS = [
   "paypal_unconfirmed",
   "invoice_void",
   "rate_limited",
+  "copy_rate_limited",
   "not_paid_yet",
   "invoice_changed",
 ] as const;

@@ -144,16 +144,19 @@ export const webhookEvents = sqliteTable("webhook_events", {
   eventCreatedAt: text("event_created_at"),
 });
 
-// Every PayPal send the server let through, for the server-wide cap (P2-S1, P2-S1b). No foreign key on purpose: a demo
-// reset or the seven-day cleanup deletes the copy's orders, and the count must stay. Rows older than a day are pruned.
+// Every PayPal send the server let through, for the caps per copy and per server (P2-S1, P2-S1b, P2-S5). No foreign
+// key on purpose: a demo reset or the seven-day cleanup deletes the copy's orders, and the count must stay. Rows older
+// than a day are pruned.
 export const paypalSends = sqliteTable(
   "paypal_sends",
   {
     id: integer().primaryKey({ autoIncrement: true }),
     changeOrderId: text("change_order_id").notNull(),
+    // The copy that sent it. Null only on rows written before the per-copy cap (P5), which age out within a day.
+    projectId: text("project_id"),
     at: text().notNull(),
   },
-  (t) => [index("paypal_sends_at_idx").on(t.at)],
+  (t) => [index("paypal_sends_at_idx").on(t.at), index("paypal_sends_project_idx").on(t.projectId, t.at)],
 );
 
 // Every Claude review the server let through, for the caps per copy and per server. No foreign key, like paypal_sends:

@@ -4,6 +4,7 @@ import { useActionState, useEffect, useId, useRef, useState, type MouseEvent, ty
 import { flushSync } from "react-dom";
 import { cancelChangeOrder, checkPayment, requoteChangeOrder, sendChangeOrder, waiveChangeOrder } from "@/app/actions";
 import type { ActionError, ActionResult, BillingActionResult, PayPalActionError } from "@/domain/action-result";
+import { SEND_LIMITS_PER_COPY } from "@/domain/send-limit";
 import type { ChangeOrder } from "@/domain/types";
 
 export interface ActionsOrder extends Pick<ChangeOrder, "id" | "status" | "payerViewUrl"> {
@@ -15,6 +16,8 @@ export interface ChangeOrderActionsProps {
   sendBlockedReason: string | null; // why PayPal actions are off (no keys on this server); null when they work
   statusLineId: string; // the note's status line (role="status", tabIndex -1), focused after an action succeeds
 }
+
+const COPY_SEND_MAX = SEND_LIMITS_PER_COPY[0].max;
 
 const errorText: Record<ActionError | PayPalActionError, string> = {
   invalid_input: "This change order isn't in your demo copy. Reload the page.",
@@ -29,7 +32,8 @@ const errorText: Record<ActionError | PayPalActionError, string> = {
   invoice_exists: "PayPal already has an invoice for this, so it can't be included at no charge. Send it again; you can cancel it afterwards.",
   paypal_unconfirmed: "PayPal may have sent it, but this page couldn't confirm it. Press Send again to check; the client won't get a second invoice.",
   invoice_void: "PayPal can't use this invoice any more, so it's marked cancelled here. Quote it again to send a new one.",
-  rate_limited: "This demo has sent as many PayPal invoices as it may for now, so nothing was sent. Try again later.",
+  rate_limited: "The demo server has sent as many PayPal invoices as it may for now, across all visitors, so nothing was sent. Try again later.",
+  copy_rate_limited: `Your demo copy has used its ${COPY_SEND_MAX} PayPal sends for the last 24 hours, so nothing was sent; resetting it doesn't change that.`,
   not_paid_yet: "PayPal doesn't show this invoice as fully paid yet. Check again after the client pays.",
   invoice_changed: "PayPal shows a different amount for this invoice, so it wasn't marked paid. Check it in PayPal.",
 };

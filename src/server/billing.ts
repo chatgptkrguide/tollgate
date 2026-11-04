@@ -148,8 +148,8 @@ async function invoiceIfReadable(paypal: InvoiceGateway, invoiceId: string): Pro
 // Every way out gives the claim back, a database error included, so a retry isn't held off for two minutes. Once
 // PayPal was asked to send, a failure answers paypal_unconfirmed, never "nothing changed": the client may have the
 // invoice, and Send again settles it either way (P2-D2). An invoice PayPal shows as cancelled, or a number that is
-// used up, makes the draft cancelled so it can be quoted again (P2-D4). Past the server-wide send cap, PayPal isn't
-// called at all (P2-S1).
+// used up, makes the draft cancelled so it can be quoted again (P2-D4). Past the copy's or the server-wide send cap,
+// PayPal isn't called at all (P2-S1, P2-S5).
 export async function sendOwnedChangeOrder(deps: BillingDeps, ownerProjectId: string, changeOrderId: string): Promise<BillingActionResult> {
   const { db, paypal, now } = deps;
   if (!paypal) return fail("not_configured");
@@ -180,10 +180,11 @@ export async function sendOwnedChangeOrder(deps: BillingDeps, ownerProjectId: st
       await release();
       return fail(current === null ? "not_found" : "invalid_state");
     }
-    if (!(await takePayPalSend(db, changeOrderId, claimedAt))) {
-      console.warn("the server-wide PayPal send limit is reached; not calling PayPal");
+    const take = await takePayPalSend(db, ownerProjectId, changeOrderId, claimedAt);
+    if (take !== "taken") {
+      console.warn(take === "copy_full" ? "a demo copy reached its PayPal send limit; not calling PayPal" : "the server-wide PayPal send limit is reached; not calling PayPal");
       await release();
-      return fail("rate_limited");
+      return fail(take === "copy_full" ? "copy_rate_limited" : "rate_limited");
     }
     let invoiceId = current.paypalInvoiceId;
     if (!invoiceId) {

@@ -43,6 +43,13 @@
       "when": 1793603301070,
       "tag": "0005_claude_calls",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793804758431,
+      "tag": "0006_send_log_project",
+      "breakpoints": true
     }
   ]
 }

@@ -616,6 +616,58 @@ describe("견적 발송·취소·다시 견적", () => {
       expect(results.filter((r) => r.ok)).toHaveLength(1);
       expect(results.filter((r) => !r.ok)).toEqual(Array(2).fill({ ok: false, error: "rate_limited" }));
     });
+
+    describe("사본별 발송 상한 (P2-S5)", () => {
+      // Sends, cancels and resets my copy n times, 15 seconds apart so the server's per-minute cap never answers.
+      async function sendCancelResetLoop(paypal: InvoiceGateway, n: number) {
+        const results = [];
+        for (let i = 0; i < n; i++) {
+          clock.set(new Date(T0.getTime() + i * 15 * 1000));
+          const draft = await orderOf(mine, "draft");
+          results.push(await sendOwnedChangeOrder(deps(paypal), mine, draft.id));
+          if ((await row(draft.id))?.status === "sent") await cancelOwnedChangeOrder(deps(paypal), mine, draft.id);
+          expect(await resetDemoCopy(db, mine, clock.now())).toBe("reset");
+        }
+        return results;
+      }
+
+      it("한 사본의 21번째 발송은 PayPal을 부르지 않고 copy_rate_limited이며, 다른 사본은 그때도 보낼 수 있다", async () => {
+        const paypal = manyInvoices();
+        const results = await sendCancelResetLoop(paypal.gateway, 20);
+        const draft = await orderOf(mine, "draft");
+        const createsBefore = paypal.calls.create.length;
+
+        const refused = await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id);
+        const other = await sendOwnedChangeOrder(deps(paypal.gateway), theirs, (await orderOf(theirs, "draft")).id);
+
+        expect(results).toEqual(Array(20).fill({ ok: true }));
+        expect(refused).toEqual({ ok: false, error: "copy_rate_limited" });
+        expect(paypal.calls.create).toHaveLength(createsBefore + 1); // only the other copy's invoice
+        expect(await row(draft.id)).toMatchObject({ status: "draft", sendClaimedAt: null, paypalInvoiceId: null });
+        expect(other).toEqual({ ok: true });
+      });
+
+      it("재설정해도 사본의 발송 상한은 돌아오지 않는다", async () => {
+        const paypal = manyInvoices();
+        await sendCancelResetLoop(paypal.gateway, 20);
+
+        expect(await resetDemoCopy(db, mine, clock.now())).toBe("reset");
+        const afterReset = await sendOwnedChangeOrder(deps(paypal.gateway), mine, (await orderOf(mine, "draft")).id);
+
+        expect(afterReset).toEqual({ ok: false, error: "copy_rate_limited" });
+        expect(paypal.calls.create).toHaveLength(20);
+      });
+
+      it("사본에 여유가 있어도 서버 상한에 걸리면 rate_limited 그대로다", async () => {
+        const copies = await draftsOfNewCopies(10);
+        const paypal = manyInvoices();
+        for (const { projectId, draftId } of copies) await sendOwnedChangeOrder(deps(paypal.gateway), projectId, draftId);
+
+        const refused = await sendOwnedChangeOrder(deps(paypal.gateway), mine, (await orderOf(mine, "draft")).id);
+
+        expect(refused).toEqual({ ok: false, error: "rate_limited" });
+      });
+    });
   });
 
   describe("PayPal에서 취소됐거나 번호가 막힌 청구서 (P2-D4)", () => {
