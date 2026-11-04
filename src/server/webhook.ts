@@ -39,10 +39,22 @@ export interface WebhookDeps {
 // Two caps, so one sender's flood of forged requests can't hold off PayPal's real ones (P3-S1): each sender gets a
 // few requests a minute before anything else is done, and all senders together get the server-wide verification
 // cap, which is higher, to keep PayPal's own rate limit for the app's sends.
+// Senders are counted in two buckets (P3-S5): requests that carry PayPal's signature headers in a valid shape, and
+// requests that don't. Unsigned junk only ever fills and evicts its own bucket, so it can't push PayPal's sender out.
+export const SENDER_BUCKETS = ["signed", "unsigned"] as const;
+export type SenderBucket = (typeof SENDER_BUCKETS)[number];
+
 export interface SenderLimit {
   max: number; // requests one sender may make per window (20 a minute)
   windowMs: number;
-  senders: Map<string, number[]>; // sender → request times; this process only, like VerifyLimit
+  maxSenders: number; // senders remembered per bucket; past it the least recently seen one is forgotten
+  // sender key → request times, least recently seen first (a Map keeps insertion order, and every request moves its
+  // sender to the end). This process only, like VerifyLimit.
+  buckets: Record<SenderBucket, Map<string, number[]>>;
+}
+
+export function newSenderLimit(max: number, windowMs: number, maxSenders: number = MAX_TRACKED_SENDERS): SenderLimit {
+  return { max, windowMs, maxSenders, buckets: { signed: new Map(), unsigned: new Map() } };
 }
 
 export interface VerifyLimit {
@@ -69,7 +81,10 @@ const RETRY_AFTER_SECONDS = 60;
 // The whole body must arrive within this, so a slow sender can't hold a connection (P3-S3). PayPal's events are a
 // few kilobytes; a real one cut off here is sent again.
 export const BODY_TIMEOUT_MS = 10_000;
-// Past this many senders in one window, new senders wait for the window to empty: memory stays bounded.
+// Senders remembered per bucket, so memory stays bounded (at most this many keys × `max` times, twice). Past it, the
+// least recently seen sender is forgotten: a new sender (PayPal's included) is never turned away for lack of room.
+// A forgotten sender starts again with a full allowance; that only helps a forger who already controls this many
+// addresses, and the server-wide verification cap still holds them.
 const MAX_TRACKED_SENDERS = 10_000;
 
 export type BodyRead = { ok: true; text: string } | { ok: false; outcome: "too_large" | "bad_request" | "timeout" };
@@ -180,17 +195,61 @@ export function senderOf(headers: Headers): string {
   return forwarded && IP_TEXT.test(forwarded) ? forwarded : "unknown";
 }
 
-// Takes one request for this sender if its window still has room. Never awaits, like takeVerifyCall.
-function takeSenderCall(limit: SenderLimit, sender: string, nowMs: number): boolean {
-  const since = nowMs - limit.windowMs;
-  if (!limit.senders.has(sender) && limit.senders.size >= MAX_TRACKED_SENDERS) {
-    for (const [key, times] of limit.senders) if ((times.at(-1) ?? 0) <= since) limit.senders.delete(key);
-    if (limit.senders.size >= MAX_TRACKED_SENDERS) return false;
+// IPv4 text with an optional IPv4-mapped IPv6 prefix, and one IPv6 group.
+const DOTTED_TAIL = /^(.*:)?(\d{1,3}(?:\.\d{1,3}){3})$/;
+const HEXTET = /^[0-9a-f]{1,4}$/;
+
+// The eight 16-bit groups of an IPv6 address, or null if the text isn't one. A dotted IPv4 tail counts as two groups.
+function ipv6Groups(address: string): number[] | null {
+  let text = address.toLowerCase();
+  const dotted = DOTTED_TAIL.exec(text);
+  if (dotted) {
+    if (dotted[1] === undefined) return null; // plain IPv4
+    const bytes = dotted[2].split(".").map(Number);
+    if (bytes.some((byte) => byte > 255)) return null;
+    text = `${dotted[1]}${((bytes[0] << 8) | bytes[1]).toString(16)}:${((bytes[2] << 8) | bytes[3]).toString(16)}`;
   }
-  const times = (limit.senders.get(sender) ?? []).filter((time) => time > since);
+  const halves = text.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] === "" ? [] : halves[0].split(":");
+  const tail = halves.length === 2 && halves[1] !== "" ? halves[1].split(":") : [];
+  if (![...head, ...tail].every((group) => HEXTET.test(group))) return null;
+  const missing = 8 - head.length - tail.length;
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return null;
+  return [...head, ...Array<string>(missing).fill("0"), ...tail].map((group) => parseInt(group, 16));
+}
+
+// The key a sender is counted under (P3-S5). One IPv6 host is usually given a whole /64, so it could rotate through
+// 2^64 addresses; every address in a /64 shares one key. An IPv4-mapped IPv6 address counts as its IPv4 address.
+// IPv4 addresses, "unknown" and text that doesn't read as IPv6 are kept as they are.
+export function senderKey(sender: string): string {
+  if (!sender.includes(":")) return sender;
+  const groups = ipv6Groups(sender);
+  if (!groups) return sender.toLowerCase();
+  if (groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff) {
+    return [groups[6] >> 8, groups[6] & 0xff, groups[7] >> 8, groups[7] & 0xff].join(".");
+  }
+  return `${groups
+    .slice(0, 4)
+    .map((group) => group.toString(16))
+    .join(":")}::/64`;
+}
+
+// Takes one request for this sender if its window still has room. Never awaits, like takeVerifyCall. Every step is
+// O(1) amortised: the sender moves to the end of its bucket, senders whose last request is out of the window are
+// dropped from the front (each one once), and a full bucket forgets its least recently seen sender.
+function takeSenderCall(limit: SenderLimit, bucket: SenderBucket, sender: string, nowMs: number): boolean {
+  const senders = limit.buckets[bucket];
+  const since = nowMs - limit.windowMs;
+  const times = (senders.get(sender) ?? []).filter((time) => time > since);
+  senders.delete(sender);
+  for (const [key, keyTimes] of senders) {
+    if ((keyTimes.at(-1) ?? 0) > since && senders.size < limit.maxSenders) break;
+    senders.delete(key);
+  }
   const room = times.length < limit.max;
   if (room) times.push(nowMs);
-  limit.senders.set(sender, times);
+  senders.set(sender, times);
   return room;
 }
 
@@ -206,13 +265,16 @@ export async function receivePayPalWebhook(deps: WebhookDeps, request: Request):
   if (declared !== null && Number(declared) > MAX_WEBHOOK_BYTES) return { status: 413, outcome: "too_large" };
   if (!webhookId || !verifier || !paypal) return { status: 503, outcome: "not_configured" };
 
+  // The sender cap comes first, for unsigned requests too, each kind in its own bucket (P3-S5). Carrying the headers
+  // proves nothing yet: PayPal confirms the signature further down.
   const headers = readWebhookHeaders(request.headers);
-  if (!headers) return { status: 400, outcome: "bad_request" };
   const receivedAt = now();
-  if (deps.senderLimit && !takeSenderCall(deps.senderLimit, senderOf(request.headers), receivedAt.getTime())) {
-    console.warn("paypal webhook: one sender is over its per-minute cap; PayPal will retry");
+  const bucket: SenderBucket = headers ? "signed" : "unsigned";
+  if (deps.senderLimit && !takeSenderCall(deps.senderLimit, bucket, senderKey(senderOf(request.headers)), receivedAt.getTime())) {
+    console.warn(`paypal webhook: one sender is over its per-minute cap (${bucket}); PayPal will retry`);
     return { status: 503, outcome: "busy", retryAfterSeconds: RETRY_AFTER_SECONDS };
   }
+  if (!headers) return { status: 400, outcome: "bad_request" };
   const body = await readBodyWithin(request, MAX_WEBHOOK_BYTES);
   if (!body.ok) {
     if (body.outcome === "timeout") return { status: 408, outcome: "body_timeout" };
@@ -339,7 +401,7 @@ async function settledOutcome(db: Db, eventId: string, invoiceId: string, order:
 }
 
 // Live as long as the server process.
-const serverSenderLimit: SenderLimit = { max: 20, windowMs: 60 * 1000, senders: new Map() };
+const serverSenderLimit = newSenderLimit(20, 60 * 1000);
 const serverVerifyLimit: VerifyLimit = { max: 60, windowMs: 60 * 1000, times: [] };
 
 export function liveWebhookDeps(): WebhookDeps {

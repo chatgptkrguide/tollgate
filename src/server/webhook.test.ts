@@ -24,10 +24,11 @@ import { verificationBody, verifyWebhookSignature, type Verification, type Webho
 import {
   BODY_TIMEOUT_MS,
   invoiceIdFromEvent,
+  newSenderLimit,
   readBodyWithin,
   receivePayPalWebhook,
+  senderKey,
   senderOf,
-  type SenderLimit,
   type VerifyLimit,
   type WebhookDeps,
   type WebhookVerifier,
@@ -488,7 +489,7 @@ describe("PayPal 결제 웹훅", () => {
 
   it("서명 확인 호출이 보낸 곳을 모두 합쳐 분당 상한을 넘으면 503과 Retry-After를 돌려주고 PayPal을 부르지 않는다", async () => {
     await markSentOrder();
-    const senderLimit: SenderLimit = { max: 5, windowMs: 60_000, senders: new Map() };
+    const senderLimit = newSenderLimit(5, 60_000);
     const verifyLimit: VerifyLimit = { max: 2, windowMs: 60_000, times: [] };
     const { deps: d, verify } = deps({ senderLimit, verifyLimit }, async () => invoiceView("PARTIALLY_PAID"));
     const from = (i: number) => ({ ...signatureHeaders, "cf-connecting-ip": `203.0.113.${i + 1}` });
@@ -505,7 +506,7 @@ describe("PayPal 결제 웹훅", () => {
 
   it("한 곳에서 온 위조 요청 폭주는 보낸 곳 상한에 먼저 걸려, 다른 곳(PayPal)에서 온 진짜 알림은 처리된다", async () => {
     await markSentOrder();
-    const senderLimit: SenderLimit = { max: 3, windowMs: 60_000, senders: new Map() };
+    const senderLimit = newSenderLimit(3, 60_000);
     const verifyLimit: VerifyLimit = { max: 5, windowMs: 60_000, times: [] };
     const verify = fakeVerifier(async () => "verified");
     // PayPal confirms only its own signature.
@@ -537,6 +538,116 @@ describe("PayPal 결제 웹훅", () => {
     expect(senderOf(headers({ "x-forwarded-for": ` ${FORGER_IP} , 10.0.0.1` }))).toBe(FORGER_IP);
     expect(senderOf(headers({}))).toBe("unknown");
     expect(senderOf(headers({ "cf-connecting-ip": "<script>", "x-forwarded-for": "not an address" }))).toBe("unknown");
+  });
+
+  describe("보낸 곳 맵 보강 (P3-S5)", () => {
+    // Unsigned: no PayPal signature headers at all.
+    const unsignedFrom = (ip: string) => ({ "content-type": "application/json", "cf-connecting-ip": ip });
+    const signedFrom = (ip: string, sig: string = signatureHeaders["paypal-transmission-sig"]) => ({ ...signatureHeaders, "paypal-transmission-sig": sig, "cf-connecting-ip": ip });
+    // PayPal confirms only its own signature.
+    function paypalOnlyVerifier() {
+      const verify = fakeVerifier(async () => "verified");
+      const verifier: WebhookVerifier = {
+        verify: async (webhookId, headers, rawEvent) =>
+          headers.transmissionSig === signatureHeaders["paypal-transmission-sig"] ? verify.verifier.verify(webhookId, headers, rawEvent) : "unverified",
+      };
+      return { verifier, calls: verify.calls };
+    }
+
+    it("맵이 가득 차면 가장 오래 안 보인 보낸 곳을 밀어내고 처음 보는 보낸 곳(PayPal)도 받는다", async () => {
+      await markSentOrder();
+      const senderLimit = newSenderLimit(3, 60_000, 3);
+      const { deps: d } = deps({ senderLimit, verifier: paypalOnlyVerifier().verifier });
+      const forgers = ["203.0.113.1", "203.0.113.2", "203.0.113.3"];
+      for (const [i, ip] of forgers.entries()) await receivePayPalWebhook(d, webhookRequest(eventBody({ id: `WH-FILL-${i}` }), signedFrom(ip, "forged")));
+
+      const real = await receivePayPalWebhook(d, webhookRequest(eventBody(), signedFrom(PAYPAL_IP)));
+
+      expect(real).toEqual({ status: 200, outcome: "settled" });
+      expect([...senderLimit.buckets.signed.keys()]).toEqual(["203.0.113.2", "203.0.113.3", PAYPAL_IP]);
+    });
+
+    it("다시 보낸 보낸 곳은 맨 뒤로 가서, 가득 찼을 때 그보다 오래 안 보인 곳이 먼저 밀려난다", async () => {
+      const senderLimit = newSenderLimit(5, 60_000, 2);
+      const { deps: d } = deps({ senderLimit });
+      const send = (ip: string) => receivePayPalWebhook(d, webhookRequest("{}", unsignedFrom(ip)));
+
+      await send("203.0.113.1");
+      await send("203.0.113.2");
+      await send("203.0.113.1");
+      await send("203.0.113.3");
+
+      expect([...senderLimit.buckets.unsigned.keys()]).toEqual(["203.0.113.1", "203.0.113.3"]);
+    });
+
+    it("창이 지난 보낸 곳은 맵이 차지 않았어도 다음 요청 때 앞에서부터 지워진다", async () => {
+      const senderLimit = newSenderLimit(5, 60_000);
+      const { deps: d } = deps({ senderLimit });
+      const at = (ms: number) => ({ ...d, now: () => new Date(RECEIVED.getTime() + ms) });
+
+      await receivePayPalWebhook(at(0), webhookRequest("{}", unsignedFrom("203.0.113.1")));
+      await receivePayPalWebhook(at(30_000), webhookRequest("{}", unsignedFrom("203.0.113.2")));
+      await receivePayPalWebhook(at(60_001), webhookRequest("{}", unsignedFrom("203.0.113.3")));
+
+      expect([...senderLimit.buckets.unsigned.keys()]).toEqual(["203.0.113.2", "203.0.113.3"]);
+    });
+
+    it("같은 /64 안의 IPv6 주소들은 한 키로 묶여 상한을 같이 쓰고, 다른 /64는 따로 센다", async () => {
+      const senderLimit = newSenderLimit(3, 60_000);
+      const { deps: d } = deps({ senderLimit });
+      const send = (ip: string) => receivePayPalWebhook(d, webhookRequest("{}", unsignedFrom(ip)));
+
+      const sameHost = [];
+      for (const ip of ["2001:db8:aa:1::1", "2001:db8:aa:1::2", "2001:db8:aa:1:ffff:ffff:ffff:ffff", "2001:0db8:00aa:0001::9"]) sameHost.push(await send(ip));
+      const otherPrefix = await send("2001:db8:aa:2::1");
+
+      expect(sameHost.slice(0, 3)).toEqual(Array(3).fill({ status: 400, outcome: "bad_request" }));
+      expect(sameHost[3]).toEqual({ status: 503, outcome: "busy", retryAfterSeconds: 60 });
+      expect(otherPrefix).toEqual({ status: 400, outcome: "bad_request" });
+      expect([...senderLimit.buckets.unsigned.keys()]).toEqual(["2001:db8:aa:1::/64", "2001:db8:aa:2::/64"]);
+    });
+
+    it("보낸 곳 키: IPv6는 /64 앞부분, IPv4에 대응된 IPv6는 IPv4, 그 밖은 그대로다", () => {
+      expect(senderKey("2001:DB8:0:0:1:2:3:4")).toBe("2001:db8:0:0::/64");
+      expect(senderKey("2001:db8::")).toBe("2001:db8:0:0::/64");
+      expect(senderKey("::1")).toBe("0:0:0:0::/64");
+      expect(senderKey("64:ff9b::192.0.2.10")).toBe("64:ff9b:0:0::/64");
+      expect(senderKey("::ffff:192.0.2.10")).toBe("192.0.2.10");
+      expect(senderKey(PAYPAL_IP)).toBe(PAYPAL_IP);
+      expect(senderKey("unknown")).toBe("unknown");
+      expect(senderKey("1:2:3:4:5:6:7:8:9")).toBe("1:2:3:4:5:6:7:8:9");
+      expect(senderKey("1::2::3")).toBe("1::2::3");
+    });
+
+    it("서명 헤더가 없는 요청은 따로 세어, 같은 주소의 서명 없는 폭주가 서명 있는 진짜 알림을 막지 못한다", async () => {
+      await markSentOrder();
+      const senderLimit = newSenderLimit(3, 60_000);
+      const { deps: d, verify } = deps({ senderLimit });
+
+      const junk = [];
+      for (let i = 0; i < 10; i++) junk.push(await receivePayPalWebhook(d, webhookRequest("{}", unsignedFrom(PAYPAL_IP))));
+      const real = await receivePayPalWebhook(d, webhookRequest(eventBody(), signedFrom(PAYPAL_IP)));
+
+      expect(junk.slice(0, 3)).toEqual(Array(3).fill({ status: 400, outcome: "bad_request" }));
+      expect(junk.slice(3)).toEqual(Array(7).fill({ status: 503, outcome: "busy", retryAfterSeconds: 60 }));
+      expect(real).toEqual({ status: 200, outcome: "settled" });
+      expect(verify.calls).toHaveLength(1);
+      expect(senderLimit.buckets.unsigned.get(PAYPAL_IP)).toHaveLength(3);
+      expect(senderLimit.buckets.signed.get(PAYPAL_IP)).toHaveLength(1);
+    });
+
+    it("서명 없는 요청이 여러 주소로 맵을 가득 채워도 서명 있는 쪽 맵의 보낸 곳은 밀려나지 않는다", async () => {
+      await markSentOrder();
+      const senderLimit = newSenderLimit(3, 60_000, 2);
+      const { deps: d } = deps({ senderLimit });
+      const first = await receivePayPalWebhook(d, webhookRequest(eventBody({ id: "WH-PARTIAL" }), signedFrom(PAYPAL_IP)));
+
+      for (let i = 1; i <= 50; i++) await receivePayPalWebhook(d, webhookRequest("{}", unsignedFrom(`203.0.113.${i}`)));
+
+      expect(first.status).toBe(200);
+      expect([...senderLimit.buckets.signed.keys()]).toEqual([PAYPAL_IP]);
+      expect(senderLimit.buckets.unsigned.size).toBe(2);
+    });
   });
 
   it("본문이 10초 안에 다 오지 않으면 408이고 읽기를 멈추며 서명 확인을 부르지 않는다", async () => {
