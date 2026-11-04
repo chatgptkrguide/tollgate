@@ -1,0 +1,16 @@
+# Render's free web service sleeps after 15 idle minutes, and the next visit then waits about a minute.
+# A request every 10 minutes keeps the public demo awake (one service running all month fits the 750 free hours).
+# GitHub runs schedules from the default branch only, and may start them late.
+name: Keep the demo awake
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping the database-only health check
+        run: curl -fsS --max-time 100 -o /dev/null -w "%{http_code} in %{time_total}s\n" https://tollgate-ratq.onrender.com/api/health/live

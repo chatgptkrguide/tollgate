@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ChangeOrderActions } from "@/components/ChangeOrderActions";
 import { Composer } from "@/components/Composer";
+import { DemoGuide } from "@/components/DemoGuide";
 import { ResetDemo } from "@/components/ResetDemo";
 import type { ActivityActor, ActivityEvent } from "@/domain/activity";
 import { formatShortDate } from "@/domain/dates";
@@ -60,6 +61,7 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
 
   return (
     <div className="min-h-dvh" data-testid="workspace" data-project-id={project.id}>
+      <DemoGuide client={client} />
       <header className="border-b border-rule bg-sheet">
         <div className="mx-auto max-w-6xl px-4 py-5 sm:px-8">
           <div className="flex items-start justify-between gap-4">
