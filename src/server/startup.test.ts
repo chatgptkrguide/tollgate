@@ -72,13 +72,22 @@ describe("서버 시작 검사와 마이그레이션", () => {
     await expect(prepareServer({ ...ON_RENDER, PAYPAL_ENV: undefined }, "drizzle")).rejects.toThrow("PAYPAL_ENV must be sandbox on Render");
   });
 
-  it("RENDER가 true이고 DATABASE_URL이 /var/data 아래가 아니면 시작을 거부한다", () => {
-    const outside = ["", "file:data/tollgate.db", "file:/var/data", "file:/var/data/", "file:/var/data/../tmp/tollgate.db", "file:/var/data//tollgate.db", "file:/var/database.db", "libsql://example.turso.io"];
+  it("RENDER가 true이고 DATABASE_URL이 /var/data 아래 파일도 원격 DB도 아니면 시작을 거부한다", () => {
+    const message = "DATABASE_URL must be under /var/data or a remote libsql:// database on Render";
+    const outside = ["", "file:data/tollgate.db", "file:/var/data", "file:/var/data/", "file:/var/data/../tmp/tollgate.db", "file:/var/data//tollgate.db", "file:/var/database.db", "http://example.turso.io", "libsql://", "not a url"];
 
-    for (const DATABASE_URL of outside) expect(startupProblems({ ...ON_RENDER, DATABASE_URL }), DATABASE_URL).toEqual(["DATABASE_URL must be under /var/data on Render"]);
-    expect(startupProblems({ RENDER: "true", PAYPAL_ENV: "sandbox" })).toEqual(["DATABASE_URL must be under /var/data on Render"]);
+    for (const DATABASE_URL of outside) expect(startupProblems({ ...ON_RENDER, DATABASE_URL }), DATABASE_URL).toEqual([message]);
+    expect(startupProblems({ RENDER: "true", PAYPAL_ENV: "sandbox" })).toEqual([message]);
     expect(startupProblems(ON_RENDER)).toEqual([]);
     expect(startupProblems({ ...ON_RENDER, DATABASE_URL: "file:/var/data/sub/tollgate.db" })).toEqual([]);
+  });
+
+  it("RENDER가 true이고 원격 DB(libsql://·https://)면 토큰이 있어야 시작한다", () => {
+    for (const DATABASE_URL of ["libsql://tollgate-demo.turso.io", "https://tollgate-demo.turso.io"]) {
+      expect(startupProblems({ ...ON_RENDER, DATABASE_URL, DATABASE_AUTH_TOKEN: "token" }), DATABASE_URL).toEqual([]);
+      expect(startupProblems({ ...ON_RENDER, DATABASE_URL }), DATABASE_URL).toEqual(["DATABASE_AUTH_TOKEN must be set for a remote database on Render"]);
+      expect(startupProblems({ ...ON_RENDER, DATABASE_URL, DATABASE_AUTH_TOKEN: "" }), DATABASE_URL).toEqual(["DATABASE_AUTH_TOKEN must be set for a remote database on Render"]);
+    }
   });
 
   it("RENDER가 없으면(로컬) 위 두 규칙을 적용하지 않는다", async () => {
@@ -102,8 +111,14 @@ describe("서버 시작 검사와 마이그레이션", () => {
     const message = (error as Error).message;
     expect(message).toContain("PAYPAL_ENV");
     expect(message).toContain("PAYPAL_WEBHOOK_ID");
-    expect(message).toContain("DATABASE_URL must be under /var/data on Render");
+    expect(message).toContain("DATABASE_URL must be under /var/data or a remote libsql:// database on Render");
     expect(message).not.toMatch(/SECRET|production|\/tmp/);
+  });
+
+  it("원격 DB 토큰이 없다는 시작 거부 메시지에 DB 주소가 들어가지 않는다", async () => {
+    const error = await prepareServer({ RENDER: "true", PAYPAL_ENV: "sandbox", DATABASE_URL: "libsql://SECRETHOST.turso.io" }, "drizzle").catch((e: unknown) => e);
+
+    expect((error as Error).message).toBe("DATABASE_AUTH_TOKEN must be set for a remote database on Render");
   });
 
   it("PAYPAL_WEBHOOK_ID에 영문·숫자 말고 다른 글자가 있으면 env 검사가 거부한다", async () => {

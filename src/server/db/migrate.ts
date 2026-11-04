@@ -10,8 +10,8 @@ export async function runMigrations(db: Db, migrationsFolder = "drizzle"): Promi
 
 // Applies the migrations with a client of its own and closes it: the server's startup code and its routes are
 // bundled apart, so they don't share getDb(). Returns how many migrations the database has applied in all.
-export async function migrateDatabase(url: string, migrationsFolder = "drizzle"): Promise<number> {
-  const db = createDb(url);
+export async function migrateDatabase(url: string, migrationsFolder = "drizzle", authToken?: string): Promise<number> {
+  const db = createDb(url, authToken);
   try {
     await runMigrations(db, migrationsFolder);
     return await appliedMigrationCount(db);

@@ -15,15 +15,31 @@ function onRenderDisk(url: string | undefined): boolean {
   return path.length > "/var/data/".length && posix.normalize(path) === path;
 }
 
+// A remote libSQL database (Turso) over an encrypted connection: libsql:// or https:// with a host.
+function remoteDatabase(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return (parsed.protocol === "libsql:" || parsed.protocol === "https:") && parsed.hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // What is wrong with this environment for a deployed server, as messages that name variables but never their values.
 // On Render (RENDER === "true"): PAYPAL_ENV must be exactly "sandbox" (P2-S4; the hackathon is sandbox only and live
-// payer links aren't supported), and DATABASE_URL must point under the disk, or the SQLite file would vanish on the
-// next deploy. Elsewhere (local, tests): no extra rules.
+// payer links aren't supported), and the database must outlive a restart: a file under the disk, or a remote libSQL
+// database with its token. A file anywhere else would vanish on the next deploy, and the free plan has no disk.
+// Elsewhere (local, tests): no extra rules.
 export function startupProblems(source: Readonly<Record<string, string | undefined>>): string[] {
   if (source.RENDER !== "true") return [];
   const problems: string[] = [];
   if (source.PAYPAL_ENV !== "sandbox") problems.push("PAYPAL_ENV must be sandbox on Render");
-  if (!onRenderDisk(source.DATABASE_URL)) problems.push("DATABASE_URL must be under /var/data on Render");
+  if (remoteDatabase(source.DATABASE_URL)) {
+    if (!source.DATABASE_AUTH_TOKEN) problems.push("DATABASE_AUTH_TOKEN must be set for a remote database on Render");
+  } else if (!onRenderDisk(source.DATABASE_URL)) {
+    problems.push("DATABASE_URL must be under /var/data or a remote libsql:// database on Render");
+  }
   return problems;
 }
 
@@ -41,15 +57,16 @@ export async function prepareServer(
 ): Promise<{ migrations: number }> {
   const problems: string[] = [];
   let databaseUrl: string | null = null;
+  let authToken: string | undefined;
   try {
-    databaseUrl = parseEnv({ ...source }).DATABASE_URL;
+    ({ DATABASE_URL: databaseUrl, DATABASE_AUTH_TOKEN: authToken } = parseEnv({ ...source }));
   } catch (error) {
     if (!(error instanceof ZodError)) throw error;
     problems.push(...envProblems(error));
   }
   problems.push(...startupProblems(source));
   if (problems.length > 0 || databaseUrl === null) throw new Error(problems.join("; "));
-  return { migrations: await migrateDatabase(databaseUrl, migrationsFolder) };
+  return { migrations: await migrateDatabase(databaseUrl, migrationsFolder, authToken) };
 }
 
 // What register() runs: the checks and migrations, or the process exits with code 1, so a misconfigured deploy fails
