@@ -23,9 +23,10 @@ describe("Render 배포 설정 (render.yaml)", () => {
     expect(text).not.toMatch(/autoDeploy:\s*true/);
   });
 
-  it("render.yaml의 디스크는 /var/data에 붙고 DATABASE_URL은 그 아래다", () => {
-    expect(lines.some((line) => line.trim() === "mountPath: /var/data")).toBe(true);
-    expect(envEntry("DATABASE_URL")).toEqual(["- key: DATABASE_URL", "value: file:/var/data/tollgate.db"]);
+  it("render.yaml은 디스크 없이 원격 DB를 쓰고, DB 주소와 토큰은 Dashboard에서 넣는다", () => {
+    expect(text).not.toMatch(/^\s*disk:/m);
+    expect(envEntry("DATABASE_URL")).toEqual(["- key: DATABASE_URL", "sync: false"]);
+    expect(envEntry("DATABASE_AUTH_TOKEN")).toEqual(["- key: DATABASE_AUTH_TOKEN", "sync: false"]);
     expect(envEntry("PAYPAL_ENV")).toEqual(["- key: PAYPAL_ENV", "value: sandbox"]);
   });
 
@@ -39,7 +40,7 @@ describe("Render 배포 설정 (render.yaml)", () => {
   it("render.yaml의 시작 명령은 pnpm start이고 빌드는 잠긴 lockfile로 설치한다", () => {
     expect(setting("startCommand")).toBe("pnpm start");
     expect(setting("buildCommand")).toBe("pnpm install --frozen-lockfile && pnpm build");
-    expect(setting("plan")).toBe("0.5c-512mb");
+    expect(setting("plan")).toBe("free");
   });
 
   it("render.yaml은 Node 버전을 NODE_VERSION으로 .nvmrc와 같은 22에 고정한다", () => {
