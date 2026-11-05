@@ -3,7 +3,7 @@ import { and, count, eq, inArray, lt, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { locateFindings } from "../../domain/finding";
 import { extraDaysForHours, priceForHours } from "../../domain/money";
-import { noOpenInvoice } from "./change-orders";
+import { hasOpenInvoice, noOpenInvoice } from "./change-orders";
 import type { Db } from "./client";
 import { isUniqueViolation } from "./errors";
 import { activityEvents, changeOrders, findings, messages, projects, scopeItems } from "./schema";
@@ -200,9 +200,13 @@ export async function ensureDemoCopy(db: Db, visitorId: string, now: Date): Prom
 
 // Puts the copy back to the seed in one batch: same project id, fresh child ids, created and last seen now.
 // Refused ("invoice_open", nothing changed) while the copy has an order with an invoice the client may still pay.
-// The check sits in every delete of the batch: if it fails, nothing is deleted, the project insert then hits the
-// existing id and the batch rolls back whole, so a send that claims an order just before the reset still wins.
+// The open invoice is looked up first, so the usual refusal never depends on how the database reports an error
+// (Turso's remote errors can arrive without the extended code isUniqueViolation reads). The same check also sits in
+// every delete of the batch as a backstop: if a send claims an order between the lookup and the batch, nothing is
+// deleted, the project insert hits the existing id and the batch rolls back whole, so the send still wins. A failed
+// batch is looked up once more, so that race answers invoice_open whatever error came back.
 export async function resetDemoCopy(db: Db, projectId: string, now: Date): Promise<"reset" | "invoice_open"> {
+  if (await hasOpenInvoiceIn(db, projectId, now)) return "invoice_open";
   const resettable = db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), noOpenInvoice(db, now)));
   try {
     await db.batch([
@@ -210,10 +214,19 @@ export async function resetDemoCopy(db: Db, projectId: string, now: Date): Promi
       ...insertStatements(db, demoRows(projectId, now)),
     ]);
   } catch (error) {
-    if (isUniqueViolation(error)) return "invoice_open";
+    if (isUniqueViolation(error) || (await hasOpenInvoiceIn(db, projectId, now))) return "invoice_open";
     throw error;
   }
   return "reset";
+}
+
+async function hasOpenInvoiceIn(db: Db, projectId: string, now: Date): Promise<boolean> {
+  const [open] = await db
+    .select({ id: changeOrders.id })
+    .from(changeOrders)
+    .where(and(eq(changeOrders.projectId, projectId), hasOpenInvoice(now)))
+    .limit(1);
+  return open !== undefined;
 }
 
 

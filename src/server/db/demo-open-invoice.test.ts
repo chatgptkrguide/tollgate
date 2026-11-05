@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activityInsert } from "./activity";
 import { SEND_CLAIM_TTL_MS } from "./change-orders";
 import { createDb, type Db } from "./client";
@@ -33,6 +33,12 @@ const setDraft = (values: Partial<typeof changeOrders.$inferInsert>) => db.updat
 const markSent = () => setDraft({ status: "sent", paypalInvoiceId: "INV2-AAAA-BBBB-CCCC-DDDD", sentAt: T0.toISOString() });
 const ordersOf = (id: string) => db.select().from(changeOrders).where(eq(changeOrders.projectId, id)).orderBy(changeOrders.id);
 const projectOf = async (id: string) => (await db.select().from(projects).where(eq(projects.id, id)))[0];
+// The shape a remote (HTTP) libSQL error can take: a primary code and a message, no extendedCode.
+const remoteConstraintError = (message: string) => Object.assign(new Error(message), { code: message.split(":")[0] });
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("열린 청구서가 있는 사본의 재설정", () => {
   it("발송된 견적이 있으면 invoice_open으로 거부하고 견적·활동·프로젝트 행을 그대로 둔다", async () => {
@@ -72,6 +78,36 @@ describe("열린 청구서가 있는 사본의 재설정", () => {
     expect(orders.map((o) => o.status).sort()).toEqual(["draft", "paid"]);
     expect(orders.map((o) => o.id)).not.toContain(draftId);
     expect(await db.select().from(activityEvents)).toEqual([]);
+  });
+
+  // Turso over HTTP can report the failed batch without extendedCode: the refusal must not depend on it.
+  it("발송된 견적이 있으면 batch를 돌리기 전에 invoice_open으로 거부해, 원격 DB 오류 모양과 상관없다", async () => {
+    await markSent();
+    const batch = vi.spyOn(db, "batch").mockRejectedValue(remoteConstraintError("SQLITE_CONSTRAINT: CHECK constraint failed"));
+
+    const result = await resetDemoCopy(db, projectId, later(60_000));
+
+    expect(result).toBe("invoice_open");
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it("조회 뒤 batch 사이에 발송이 끼어들면 extendedCode 없는 오류여도 invoice_open이다", async () => {
+    vi.spyOn(db, "batch").mockImplementationOnce(async () => {
+      await markSent(); // the send claims the order just before the reset's batch runs
+      throw remoteConstraintError("SQLITE_CONSTRAINT: SQLite error: constraint failed");
+    });
+
+    const result = await resetDemoCopy(db, projectId, later(60_000));
+
+    expect(result).toBe("invoice_open");
+    expect((await ordersOf(projectId)).find((o) => o.id === draftId)?.status).toBe("sent");
+  });
+
+  it("열린 청구서가 없는데 batch가 실패하면 오류를 그대로 던진다(server_error가 된다)", async () => {
+    const failure = remoteConstraintError("SQLITE_BUSY: database is locked");
+    vi.spyOn(db, "batch").mockRejectedValueOnce(failure);
+
+    await expect(resetDemoCopy(db, projectId, later(60_000))).rejects.toBe(failure);
   });
 
   it("다른 사본의 열린 청구서는 이 사본의 재설정을 막지 않는다", async () => {
