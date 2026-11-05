@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
-import { Literata, Public_Sans } from "next/font/google";
+import { Overpass, Overpass_Mono, Public_Sans } from "next/font/google";
 import "./globals.css";
 
-// Literata sets what the client wrote and the scope itself; Public Sans runs the interface.
-const literata = Literata({
-  variable: "--font-literata",
+// "Toll ticket" (docs/DESIGN.md): Overpass comes from US highway signage and sets headings, labels and buttons;
+// Overpass Mono sets ticket numbers, amounts and dates; Public Sans keeps the long text (messages, help) easy to read.
+const overpass = Overpass({
+  variable: "--font-overpass",
+  subsets: ["latin"],
+});
+
+const overpassMono = Overpass_Mono({
+  variable: "--font-overpass-mono",
   subsets: ["latin"],
 });
 
@@ -21,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${literata.variable} ${publicSans.variable} h-full antialiased`}>
+    <html lang="en" className={`${overpass.variable} ${overpassMono.variable} ${publicSans.variable} h-full antialiased`}>
       <body className="min-h-full">{children}</body>
     </html>
   );
