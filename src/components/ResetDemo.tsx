@@ -46,13 +46,13 @@ export function ResetDemo({ projectId }: ResetDemoProps) {
     target.current?.focus();
   };
   const QUIET =
-    "min-h-11 rounded-md px-2 text-sm text-ink-soft underline decoration-rule underline-offset-4 not-aria-disabled:hover:text-ink not-aria-disabled:hover:decoration-ink-soft not-aria-disabled:active:bg-paper";
+    "min-h-11 rounded-[8px] px-3 pt-0.5 font-display text-[14px] font-bold text-ink-2 transition-colors not-aria-disabled:hover:bg-canvas not-aria-disabled:hover:text-ink not-aria-disabled:active:translate-y-px";
 
   return (
     <form action={resetAction} data-action="reset-demo" className="flex flex-col items-end gap-1">
       <input type="hidden" name="projectId" value={projectId} />
       {confirming ? (
-        <div className="-mr-2 flex flex-wrap justify-end gap-1">
+        <div className="-mr-3 flex flex-wrap justify-end gap-1">
           <button
             key="keep"
             ref={keepRef}
@@ -73,18 +73,18 @@ export function ResetDemo({ projectId }: ResetDemoProps) {
             onClick={(event) => {
               if (pending) event.preventDefault(); // no second reset while the first is running
             }}
-            className={`${QUIET} font-semibold text-ink aria-disabled:cursor-wait`}
+            className={`${QUIET} text-stop-ink aria-disabled:cursor-wait`}
           >
             {pending ? "Resetting…" : "Confirm: reset demo"}
           </button>
         </div>
       ) : (
-        <button key="reset" ref={resetRef} type="button" onClick={() => swap(true, keepRef)} className={`-mr-2 ${QUIET}`}>
+        <button key="reset" ref={resetRef} type="button" onClick={() => swap(true, keepRef)} className={`-mr-3 ${QUIET}`}>
           Reset demo
         </button>
       )}
       {confirming && (
-        <p id={confirmId} className="max-w-xs text-right text-sm leading-relaxed">
+        <p id={confirmId} className="max-w-xs text-right text-[13px] leading-relaxed">
           This deletes every change you made to this demo and starts it over.
         </p>
       )}
@@ -93,7 +93,7 @@ export function ResetDemo({ projectId }: ResetDemoProps) {
         {progress}
       </p>
       {state && !state.ok && (
-        <p role="alert" className="max-w-xs border-l-2 border-mark pl-3 text-sm font-semibold text-ink">
+        <p role="alert" className="max-w-xs border-l-2 border-stop pl-3 text-[13px] font-semibold text-ink">
           {errorText[state.error]}
         </p>
       )}

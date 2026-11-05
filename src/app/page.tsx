@@ -45,8 +45,8 @@ async function VisitorWorkspace(): Promise<ReactElement> {
 // Only when the request skipped proxy.ts, so it has no visitor cookie yet.
 function MissingVisitorNotice() {
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8">
-      <p className="font-serif text-[22px]">Reload the page to start your demo.</p>
+    <main className="mx-auto max-w-[1280px] px-4 py-10 sm:px-8">
+      <p className="font-display text-[22px] font-bold">Reload the page to start your demo.</p>
     </main>
   );
 }

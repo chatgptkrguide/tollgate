@@ -51,11 +51,14 @@ const checkErrorText: Partial<Record<ActionError | PayPalActionError, string>> =
   not_configured: "PayPal isn't set up on this server, so the payment couldn't be checked.",
 };
 
-// Pressing shows a color change; a disabled (aria-disabled) button shows none and takes palette colors.
-const PRIMARY =
-  "min-h-11 rounded-md bg-ink px-4 text-sm font-semibold text-sheet not-aria-disabled:hover:bg-mark not-aria-disabled:active:bg-ink-soft aria-disabled:bg-rule aria-disabled:text-ink-soft";
-const SECONDARY =
-  "min-h-11 rounded-md border border-rule bg-sheet px-3 text-sm font-semibold text-ink-soft not-aria-disabled:hover:border-ink-soft not-aria-disabled:hover:text-ink not-aria-disabled:active:bg-paper aria-disabled:cursor-wait";
+// Classes in globals.css: a 1px press, hover shades, and palette colours when aria-disabled (no colour change then).
+const PRIMARY = "btn btn-primary";
+const SECONDARY = "btn btn-secondary";
+
+// A thin running bar along the bottom of a busy button; the label says the same in words.
+function Busy() {
+  return <span aria-hidden="true" className="btn-progress" />;
+}
 
 // The pressed button is about to disappear (the note changes state), so focus goes to the status line,
 // and the screen reader reads the new status.
@@ -122,7 +125,7 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
   };
 
   const reason = blocked && (
-    <p id={reasonId} className="mt-2 text-sm leading-relaxed text-ink-soft">
+    <p id={reasonId} className="mt-3 text-[14px] leading-relaxed text-ink-2">
       {sendBlockedReason}
     </p>
   );
@@ -132,11 +135,11 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
     state &&
     !state.ok &&
     (state.error === "not_paid_yet" ? (
-      <p role="status" className="mt-2 text-sm leading-relaxed text-ink-soft">
+      <p role="status" className="mt-3 text-[14px] leading-relaxed text-ink-2">
         {errorText.not_paid_yet}
       </p>
     ) : (
-      <p role="alert" className="mt-2 border-l-2 border-mark pl-3 text-sm font-semibold text-ink">
+      <p role="alert" className="mt-3 border-l-2 border-stop pl-3 text-[14px] leading-relaxed font-semibold text-ink">
         {texts[state.error] ?? errorText[state.error]}
       </p>
     ));
@@ -162,6 +165,7 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
               className={`${PRIMARY} ${blocked ? "aria-disabled:cursor-not-allowed" : "aria-disabled:cursor-wait"}`}
             >
               {sending ? "Sending…" : resend ? "Send again" : "Send change order"}
+              {sending && <Busy />}
             </button>
           </form>
           {!resend && (
@@ -201,12 +205,12 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
           )}
         </div>
         {resend && (
-          <p id={resendId} className="mt-2 text-sm leading-relaxed">
+          <p id={resendId} className="mt-3 text-[14px] leading-relaxed">
             PayPal already has this invoice from an earlier try, and the client may have it. Send it again to finish; you can cancel it afterwards.
           </p>
         )}
         {confirmingWaive && (
-          <p id={confirmId} className="mt-2 text-sm leading-relaxed">
+          <p id={confirmId} className="mt-3 text-[14px] leading-relaxed">
             The client won&apos;t be billed for this, and it can&apos;t be undone.
           </p>
         )}
@@ -227,73 +231,80 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
             href={order.payerViewUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-11 items-center text-sm font-semibold text-ink underline decoration-mark underline-offset-4 hover:decoration-ink"
+            className="btn btn-primary w-full sm:w-auto"
           >
             Open the client&apos;s PayPal page
+            <svg aria-hidden="true" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" className="-mt-0.5">
+              <path d="M4.5 2.5h5v5M9.5 2.5 3 9" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
         )}
         {order.payerViewUrl && (
-          <p className="text-sm leading-relaxed text-ink-soft">
+          <p className="mt-2 text-[14px] leading-relaxed text-ink-2">
             Pay it as the client with the sandbox buyer account from the Devpost testing notes. This page turns green
             when PayPal confirms.
           </p>
         )}
         {/* When the webhook is late: reads the invoice from PayPal and marks it paid if PayPal says so. */}
-        <form action={checkAction} data-action="check-payment" className="mt-2">
-          <input type="hidden" name="changeOrderId" value={order.id} />
-          <button
-            type="submit"
-            aria-disabled={blocked || checking || undefined}
-            aria-describedby={blocked ? reasonId : undefined}
-            onClick={submitOnce(blocked || checking)}
-            className={`${SECONDARY} ${blocked ? "aria-disabled:cursor-not-allowed" : "aria-disabled:cursor-wait"}`}
-          >
-            {checking ? "Checking…" : "Check payment"}
-          </button>
-        </form>
-        <form action={cancelAction} data-action="cancel" className="mt-2 flex flex-wrap gap-2">
-          <input type="hidden" name="changeOrderId" value={order.id} />
-          {confirmingCancel ? (
-            <>
-              <button
-                key="keep-invoice"
-                ref={keepInvoiceRef}
-                type="button"
-                onClick={cancelling ? undefined : () => closeConfirm(cancelRef)}
-                aria-disabled={cancelling || undefined}
-                aria-describedby={cancelConfirmId}
-                className={SECONDARY}
-              >
-                Keep the invoice
-              </button>
-              <button
-                key="confirm-cancel"
-                type="submit"
-                aria-disabled={cancelling || undefined}
-                aria-describedby={cancelConfirmId}
-                onClick={submitOnce(cancelling)}
-                className={`${PRIMARY} aria-disabled:cursor-wait`}
-              >
-                {cancelling ? "Cancelling…" : "Confirm: cancel the invoice"}
-              </button>
-            </>
-          ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <form action={checkAction} data-action="check-payment">
+            <input type="hidden" name="changeOrderId" value={order.id} />
             <button
-              key="cancel"
-              ref={cancelRef}
-              type="button"
-              aria-disabled={blocked || undefined}
+              type="submit"
+              aria-disabled={blocked || checking || undefined}
               aria-describedby={blocked ? reasonId : undefined}
-              onClick={blocked ? undefined : () => openConfirm("cancel", keepInvoiceRef)}
-              className={`${SECONDARY} aria-disabled:cursor-not-allowed`}
+              onClick={submitOnce(blocked || checking)}
+              className={`${SECONDARY} ${blocked ? "aria-disabled:cursor-not-allowed" : "aria-disabled:cursor-wait"}`}
             >
-              Cancel invoice
+              {checking ? "Checking…" : "Check payment"}
+              {checking && <Busy />}
             </button>
-          )}
-        </form>
+          </form>
+          <form action={cancelAction} data-action="cancel" className="flex flex-wrap gap-2">
+            <input type="hidden" name="changeOrderId" value={order.id} />
+            {confirmingCancel ? (
+              <>
+                <button
+                  key="keep-invoice"
+                  ref={keepInvoiceRef}
+                  type="button"
+                  onClick={cancelling ? undefined : () => closeConfirm(cancelRef)}
+                  aria-disabled={cancelling || undefined}
+                  aria-describedby={cancelConfirmId}
+                  className={SECONDARY}
+                >
+                  Keep the invoice
+                </button>
+                <button
+                  key="confirm-cancel"
+                  type="submit"
+                  aria-disabled={cancelling || undefined}
+                  aria-describedby={cancelConfirmId}
+                  onClick={submitOnce(cancelling)}
+                  className={`${PRIMARY} aria-disabled:cursor-wait`}
+                >
+                  {cancelling ? "Cancelling…" : "Confirm: cancel the invoice"}
+                  {cancelling && <Busy />}
+                </button>
+              </>
+            ) : (
+              <button
+                key="cancel"
+                ref={cancelRef}
+                type="button"
+                aria-disabled={blocked || undefined}
+                aria-describedby={blocked ? reasonId : undefined}
+                onClick={blocked ? undefined : () => openConfirm("cancel", keepInvoiceRef)}
+                className={`${SECONDARY} aria-disabled:cursor-not-allowed`}
+              >
+                Cancel invoice
+              </button>
+            )}
+          </form>
+        </div>
         {confirmingCancel && (
-          <p id={cancelConfirmId} className="mt-2 text-sm leading-relaxed">
+          <p id={cancelConfirmId} className="mt-3 text-[14px] leading-relaxed">
             PayPal will cancel the invoice and the client can no longer pay it. You can quote this again afterwards.
           </p>
         )}
@@ -311,6 +322,7 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
           <input type="hidden" name="changeOrderId" value={order.id} />
           <button type="submit" aria-disabled={requoting || undefined} onClick={submitOnce(requoting)} className={SECONDARY}>
             {requoting ? "Quoting…" : "Quote again"}
+            {requoting && <Busy />}
           </button>
         </form>
         {sendState?.ok === false && sendState.error === "invoice_void" && errorFor(sendState)}

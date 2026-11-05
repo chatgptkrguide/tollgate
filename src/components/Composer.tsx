@@ -62,29 +62,29 @@ export function Composer({ client, blockedReason }: ComposerProps) {
   };
 
   return (
-    <form action={formAction} className="border-t border-rule bg-paper/50 px-5 py-6 sm:px-8">
-      <label htmlFor="incoming" className="text-sm font-semibold">
+    <form action={formAction} className="border-t border-line bg-surface px-5 pt-4 pb-5 sm:px-6">
+      <label htmlFor="incoming" className="font-display text-[14px] font-bold">
         New message from {client}
       </label>
-      <textarea
-        id="incoming"
-        name="message"
-        aria-describedby={blockedReason ? "incoming-help check-blocked" : "incoming-help"}
-        rows={3}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        placeholder="Paste their latest email or chat message"
-        className="mt-2 block w-full max-w-[62ch] resize-y rounded-md border border-ink-soft bg-sheet px-3 py-2 font-serif text-[17px] leading-relaxed placeholder:text-ink-soft"
-      />
-      <p id="incoming-help" className="mt-2 max-w-[62ch] text-sm leading-relaxed text-ink-soft">
+      {/* While Claude reads, a thin line sweeps the message (hidden under reduced motion; the result line says it in words). */}
+      <div className="relative mt-2">
+        <textarea
+          id="incoming"
+          name="message"
+          aria-describedby={blockedReason ? "incoming-help check-blocked" : "incoming-help"}
+          rows={3}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          placeholder="Paste their latest email or chat message"
+          className="block w-full resize-y rounded-[8px] border border-field bg-surface px-3 py-2.5 text-[16px] leading-relaxed placeholder:text-ink-2 focus-visible:border-ink"
+        />
+        {pending && <span aria-hidden="true" className="scan-line" />}
+      </div>
+      <p id="incoming-help" className="mt-2 text-[13px] leading-relaxed text-ink-2">
         Claude compares it with scope version 1. This is a public demo: the text goes to Claude and stays in your copy, so paste nothing private.
       </p>
-      <div className="mt-3 flex max-w-[62ch] flex-wrap items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => setText(SAMPLE_MESSAGE)}
-          className="min-h-11 rounded-md border border-rule bg-sheet px-3 text-sm font-semibold text-ink-soft hover:border-ink-soft hover:text-ink"
-        >
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <button type="button" onClick={() => setText(SAMPLE_MESSAGE)} className="btn btn-secondary">
           Use a sample message
         </button>
         <button
@@ -92,18 +92,19 @@ export function Composer({ client, blockedReason }: ComposerProps) {
           aria-disabled={off}
           aria-describedby={blockedReason ? "check-blocked" : undefined}
           onClick={stopIfOff}
-          className="min-h-11 rounded-md bg-ink px-4 text-sm font-semibold text-sheet not-aria-disabled:hover:bg-mark not-aria-disabled:active:bg-ink-soft aria-disabled:cursor-not-allowed aria-disabled:bg-rule aria-disabled:text-ink-soft"
+          className={`btn btn-primary ${pending ? "aria-disabled:cursor-wait" : "aria-disabled:cursor-not-allowed"}`}
         >
           {pending ? "Checking…" : "Check scope"}
+          {pending && <span aria-hidden="true" className="btn-progress" />}
         </button>
       </div>
       {/* Once pressed, the reason moves into the result line below; this copy stays for aria-describedby. */}
       {blockedReason && (
-        <p id="check-blocked" className={showBlocked ? "sr-only" : "mt-2 max-w-[62ch] text-sm leading-relaxed text-ink-soft"}>
+        <p id="check-blocked" className={showBlocked ? "sr-only" : "mt-2 text-[13px] leading-relaxed text-ink-2"}>
           {blockedReason}
         </p>
       )}
-      <p role="status" className="mt-2 max-w-[62ch] text-sm leading-relaxed" data-testid="review-result">
+      <p role="status" className="mt-2 text-[14px] leading-relaxed" data-testid="review-result">
         {pending ? "Claude is reading the message. This can take up to a minute." : showBlocked ? blockedReason : resultText(state)}
       </p>
     </form>

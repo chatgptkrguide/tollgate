@@ -1,17 +1,23 @@
-import type { ReactNode } from "react";
-import { ChangeOrderActions } from "@/components/ChangeOrderActions";
-import { Composer } from "@/components/Composer";
+import { ActivityPanel } from "@/components/ActivityPanel";
+import { BarrierGlyph } from "@/components/BarrierGlyph";
+import { Conversation } from "@/components/Conversation";
+import { CountingAmount } from "@/components/CountingAmount";
 import { DeliveryPanel } from "@/components/DeliveryPanel";
 import { DemoGuide, type GuideTarget } from "@/components/DemoGuide";
+import { LinkHighlighter } from "@/components/LinkHighlighter";
+import type { SeenSnapshot } from "@/components/motion-events";
+import { MotionDirector } from "@/components/MotionDirector";
+import { noteId } from "@/components/order-text";
 import { RefreshOnReturn } from "@/components/RefreshOnReturn";
 import { ResetDemo } from "@/components/ResetDemo";
-import type { ActivityActor, ActivityEvent } from "@/domain/activity";
+import { ScopePanel } from "@/components/ScopePanel";
+import { Ticket } from "@/components/Ticket";
+import type { ActivityEvent } from "@/domain/activity";
 import { isUnpaid } from "@/domain/change-order";
 import { formatShortDate } from "@/domain/dates";
 import { formatUsd } from "@/domain/money";
-import { segmentBody, type BodySegment } from "@/domain/segments";
-import type { ChangeOrder, ChangeOrderStatus } from "@/domain/types";
-import type { FindingWithOrder, ThreadMessage, WorkspaceData } from "@/domain/workspace";
+import type { ChangeOrder, Finding } from "@/domain/types";
+import type { WorkspaceData } from "@/domain/workspace";
 
 export interface WorkspaceProps {
   data: WorkspaceData;
@@ -20,42 +26,23 @@ export interface WorkspaceProps {
   reviewBlockedReason: string | null; // set when this server has no Claude key, so checking a message is off
 }
 
-const statusText: Record<ChangeOrderStatus, string> = {
-  draft: "Not sent yet",
-  sent: "Sent to client, not paid yet",
-  paid: "Paid",
-  waived: "Included at no charge",
-  cancelled: "Cancelled",
-};
-
-const statusColor: Record<ChangeOrderStatus, string> = {
-  draft: "text-mark",
-  sent: "text-mark",
-  paid: "text-paid",
-  waived: "text-ink-soft",
-  cancelled: "text-ink-soft",
-};
-
-const noteLine: Record<ChangeOrderStatus, string> = {
-  draft: "border-mark",
-  sent: "border-mark",
-  paid: "border-paid",
-  waived: "border-rule",
-  cancelled: "border-rule",
-};
-
-// Shown but not billed, so struck through in the totals panel.
-const notCounted = (status: ChangeOrderStatus) => status === "waived" || status === "cancelled";
-
-const noteId = (order: ChangeOrder) => `note-${order.id}`;
-const statusLineId = (order: ChangeOrder) => `status-${order.id}`;
-const titleId = (order: ChangeOrder) => `title-${order.id}`;
-
-function statusLine(order: ChangeOrder): string {
-  return order.status === "paid" && order.paidAt ? `${statusText.paid} ${formatShortDate(order.paidAt)}` : statusText[order.status];
+interface TicketEntry {
+  finding: Finding;
+  order: ChangeOrder;
+  author: string;
+  askedOn: string;
 }
 
-const moreDays = (days: number) => `about ${days} more ${days === 1 ? "day" : "days"}`;
+interface ProjectHeaderProps {
+  data: WorkspaceData;
+  client: string;
+}
+
+interface TicketsColumnProps {
+  entries: readonly TicketEntry[];
+  sendBlockedReason: string | null;
+  className?: string;
+}
 
 // The first change order the visitor can act on (draft or sent) and the message that asked for it, for the guide.
 function guideTarget(data: WorkspaceData): GuideTarget | null {
@@ -65,71 +52,78 @@ function guideTarget(data: WorkspaceData): GuideTarget | null {
   return { href: `#${noteId(order)}`, author: message.author.split(" ")[0], sentOn: formatShortDate(message.sentAt) };
 }
 
-// The whole screen is rendered on the server from the database; only the action forms run in the browser.
+// One ticket per marked phrase, showing its live order (or the cancelled one, until it's quoted again). Newest message
+// first, so a ticket Claude just printed lands at the top of the column. Keyed by finding: quoting a cancelled order
+// again shows a new order on the same ticket, which stays mounted so its buttons can move focus to the new status.
+function ticketEntries(data: WorkspaceData): TicketEntry[] {
+  const entries: TicketEntry[] = [];
+  for (const message of [...data.messages].reverse()) {
+    for (const { finding, order } of message.findings) {
+      if (order) entries.push({ finding, order, author: message.author.split(" ")[0], askedOn: message.sentAt });
+    }
+  }
+  return entries;
+}
+
+// What this render shows, for MotionDirector to compare with what the tab drew last.
+function seenSnapshot(data: WorkspaceData, activity: readonly ActivityEvent[]): string {
+  const snapshot: SeenSnapshot = {
+    orders: Object.fromEntries(data.changeOrders.map((o) => [o.id, o.status])),
+    activity: activity.reduce((max, e) => Math.max(max, e.id), 0),
+    launch: data.delivery.launch,
+  };
+  return JSON.stringify(snapshot);
+}
+
+// The whole screen is rendered on the server from the database; only the action forms and the small motion helpers
+// run in the browser.
 export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReason }: WorkspaceProps) {
-  const { project, totals } = data;
+  const { project } = data;
   const client = data.messages.find((m) => m.from === "client")?.author ?? project.clientName;
   const awaitingPayment = data.changeOrders.some((o) => o.status === "sent");
 
   return (
     <div className="min-h-dvh" data-testid="workspace" data-project-id={project.id}>
       {awaitingPayment && <RefreshOnReturn />}
-      <div className="border-b border-rule bg-sheet">
-        <div className="mx-auto flex max-w-6xl items-start justify-between gap-4 px-4 py-3 sm:px-8">
-          {/* min-h-11 matches the Reset demo button, so the two share a baseline. */}
-          <p className="flex min-h-11 items-center font-serif text-[18px] font-semibold tracking-[-0.01em]">
-            <span className="border-b-2 border-mark leading-tight">Toll</span>
-            <span className="border-b-2 border-transparent leading-tight">gate</span>
+      <MotionDirector projectId={project.id} snapshot={seenSnapshot(data, activity)} />
+      <LinkHighlighter />
+
+      <div className="sticky top-0 z-30 border-b border-line bg-surface">
+        <div className="mx-auto flex min-h-16 max-w-[1280px] items-center gap-4 px-4 py-2 sm:px-8">
+          <p className="flex items-center gap-2 pt-0.5 font-display text-[20px] font-extrabold tracking-[-0.01em]">
+            <BarrierGlyph size={28} />
+            Tollgate
           </p>
-          <ResetDemo projectId={project.id} />
+          <span aria-hidden="true" className="hidden h-6 w-px bg-line md:block" />
+          <p className="hidden min-w-0 truncate pt-0.5 font-display text-[15px] text-ink-2 md:block">
+            <span className="font-bold text-ink">{project.clientName}</span>
+            <span className="mx-2">/</span>
+            {project.title}
+          </p>
+          <div className="ml-auto flex items-center gap-2">
+            {/* Reserved for the language switcher. */}
+            <div id="locale-slot" />
+            <ResetDemo projectId={project.id} />
+          </div>
         </div>
       </div>
-      <DemoGuide
-        client={client}
-        reviewBlockedReason={reviewBlockedReason}
-        target={guideTarget(data)}
-        defaultOpen={activity.length === 0}
-      />
-      <header className="border-b border-rule bg-sheet">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-x-10 gap-y-4 px-4 py-5 sm:px-8">
-          <div>
-            <h1 className="font-serif text-[28px] leading-tight">{project.clientName}</h1>
-            <p className="text-ink-soft">{project.title}</p>
-          </div>
-          <dl className="flex gap-8 tabular-nums">
-            <div>
-              <dt className="text-sm text-ink-soft">Agreed</dt>
-              <dd className="text-[22px]">{formatUsd(totals.agreedCents)}</dd>
-            </div>
-            <div data-testid="header-total">
-              <dt className="text-sm text-ink-soft">Total with changes</dt>
-              <dd className={`text-[22px] font-semibold ${totals.hasUnpaid ? "text-mark" : "text-paid"}`}>
-                {formatUsd(totals.totalCents)}
-              </dd>
-              {totals.unpaidCents > 0 && <dd className="text-sm text-ink-soft">{formatUsd(totals.unpaidCents)} not paid yet</dd>}
-            </div>
-          </dl>
-        </div>
-      </header>
 
-      {/* Delivery comes first in the page, so on a phone it sits right under the totals; on a wide screen it heads the
+      <DemoGuide client={client} reviewBlockedReason={reviewBlockedReason} target={guideTarget(data)} defaultOpen={activity.length === 0} />
+      <ProjectHeader data={data} client={client} />
+
+      {/* Tickets come first in the page, so on a phone they sit right under the total; on a wide screen they head the
           right column and the conversation spans both rows on the left. */}
-      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:items-start">
-        <DeliveryPanel plan={data.delivery} className="lg:col-start-2 lg:row-start-1" />
-
-        <section aria-labelledby="thread-title" className="rounded-md border border-rule bg-sheet lg:col-start-1 lg:row-span-2 lg:row-start-1">
-          <h2 id="thread-title" className="sr-only">
-            Conversation with {project.clientName}
-          </h2>
-          <ol>
-            {data.messages.map((m) => (
-              <MessageRow key={m.id} message={m} sendBlockedReason={sendBlockedReason} />
-            ))}
-          </ol>
-          <Composer client={client} blockedReason={reviewBlockedReason} />
-        </section>
-
+      <main className="mx-auto grid max-w-[1280px] gap-6 px-4 pt-6 pb-16 sm:px-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-8">
+        <TicketsColumn entries={ticketEntries(data)} sendBlockedReason={sendBlockedReason} className="lg:col-start-2 lg:row-start-1" />
+        <Conversation
+          messages={data.messages}
+          clientName={project.clientName}
+          client={client}
+          reviewBlockedReason={reviewBlockedReason}
+          className="lg:col-start-1 lg:row-span-2 lg:row-start-1"
+        />
         <div className="space-y-6 lg:col-start-2 lg:row-start-2">
+          <DeliveryPanel plan={data.delivery} />
           <ScopePanel data={data} />
           <ActivityPanel activity={activity} />
         </div>
@@ -138,217 +132,66 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
   );
 }
 
-interface MessageRowProps {
-  message: ThreadMessage;
-  sendBlockedReason: string | null;
-}
-
-function MessageRow({ message, sendBlockedReason }: MessageRowProps) {
-  // Every finding is stored with its change order; one without any isn't drawn.
-  const quoted = message.findings.filter((f): f is FindingWithOrder & { order: ChangeOrder } => f.order !== null);
+function ProjectHeader({ data, client }: ProjectHeaderProps) {
+  const { project, totals } = data;
+  const tone = totals.hasUnpaid ? "stop" : "go";
 
   return (
-    <li className="grid gap-x-8 gap-y-4 border-b border-rule px-5 py-6 last:border-b-0 sm:px-8 md:grid-cols-[minmax(0,1fr)_220px]">
-      <div>
-        <p className="text-sm text-ink-soft">
-          <span className="font-semibold text-ink">{message.author}</span>
-          <span className="ml-2">{formatShortDate(message.sentAt)}</span>
-        </p>
-        <p className={`mt-2 max-w-[62ch] font-serif text-[17px] leading-[1.65] ${message.from === "me" ? "text-ink-soft" : ""}`}>
-          <MarkedBody body={message.body} quoted={quoted} />
+    <header className="border-b border-line bg-surface">
+      <div className="mx-auto flex max-w-[1280px] flex-wrap items-end justify-between gap-x-10 gap-y-5 px-4 py-6 sm:px-8">
+        <div>
+          <h1 className="font-display text-[30px] leading-tight font-extrabold tracking-[-0.015em]">{project.clientName}</h1>
+          <p className="mt-1 text-ink-2">
+            {project.title} · {client} · agreed {formatShortDate(project.agreedOn)}
+          </p>
+        </div>
+        <dl className="flex flex-wrap items-end gap-x-8 gap-y-3">
+          <div>
+            <dt className="font-display text-[13px] font-bold text-ink-2">Agreed</dt>
+            <dd className="mt-1.5 font-display text-[24px] leading-none font-bold text-ink-2 tabular-nums">{formatUsd(totals.agreedCents)}</dd>
+          </div>
+          <div data-testid="header-total" data-fx-total="" data-tone={tone}>
+            <dt className="font-display text-[13px] font-bold text-ink-2">Total with changes</dt>
+            <dd className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className={`total-figure pt-1 font-display text-[44px] leading-none font-extrabold tracking-[-0.02em] tabular-nums ${totals.hasUnpaid ? "text-stop" : "text-go"}`}>
+                <CountingAmount cents={totals.totalCents} />
+              </span>
+              <span className="chip">
+                <span className="lamp" aria-hidden="true" />
+                {totals.unpaidCents > 0 ? `${formatUsd(totals.unpaidCents)} not paid yet` : "All paid"}
+              </span>
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </header>
+  );
+}
+
+function TicketsColumn({ entries, sendBlockedReason, className = "" }: TicketsColumnProps) {
+  const open = entries.filter((e) => isUnpaid(e.order)).length;
+
+  return (
+    <section aria-labelledby="tickets-title" className={`min-w-0 ${className}`}>
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 id="tickets-title" className="font-display text-[20px] leading-tight font-bold">
+          Tickets
+        </h2>
+        <p className="font-mono text-[12px] text-ink-2">
+          {entries.length} {entries.length === 1 ? "ticket" : "tickets"} · {open} open
         </p>
       </div>
-      {quoted.length > 0 && (
-        <div className="space-y-6">
-          {/* Keyed by finding: quoting a cancelled order again shows a new order in the same note, which stays
-              mounted so its buttons can move focus to the new status. */}
-          {quoted.map(({ finding, order }) => (
-            <MarginNote
-              key={finding.id}
-              quote={finding.quote}
-              reason={finding.reason}
-              order={order}
-              sendBlockedReason={sendBlockedReason}
-            />
-          ))}
-        </div>
-      )}
-    </li>
-  );
-}
-
-interface MarkedBodyProps {
-  body: string;
-  quoted: readonly (FindingWithOrder & { order: ChangeOrder })[];
-}
-
-// Marks each quote at its stored offsets; a span that doesn't match the text is left unmarked.
-function MarkedBody({ body, quoted }: MarkedBodyProps) {
-  const orderOf = new Map(quoted.map(({ finding, order }) => [finding.id, order]));
-  const segments = segmentBody(
-    body,
-    quoted.map(({ finding }) => ({ id: finding.id, start: finding.quoteStart, end: finding.quoteEnd, quote: finding.quote })),
-  );
-
-  // Each segment starts at a different offset, which makes a stable key.
-  const parts: ReactNode[] = [];
-  let at = 0;
-  for (const segment of segments) {
-    parts.push(<Segment key={`${segment.kind}-${at}`} segment={segment} order={segment.kind === "mark" ? orderOf.get(segment.id) : undefined} />);
-    at += segment.text.length;
-  }
-  return <>{parts}</>;
-}
-
-interface SegmentProps {
-  segment: BodySegment;
-  order: ChangeOrder | undefined;
-}
-
-function Segment({ segment, order }: SegmentProps) {
-  if (segment.kind === "text" || !order) return <>{segment.text}</>;
-  // Described by the note's status and title only: the whole note would include its button names.
-  // Few screen readers read a description on text that takes no focus, so the note also quotes the mark.
-  return (
-    <mark
-      className="scope-mark"
-      data-status={order.status}
-      data-animate={order.status === "draft"}
-      aria-describedby={`${statusLineId(order)} ${titleId(order)}`}
-    >
-      {segment.text}
-    </mark>
-  );
-}
-
-interface MarginNoteProps {
-  quote: string;
-  reason: string;
-  order: ChangeOrder;
-  sendBlockedReason: string | null;
-}
-
-function MarginNote({ quote, reason, order, sendBlockedReason }: MarginNoteProps) {
-  const open = order.status === "draft";
-
-  return (
-    // role="note": a margin note belongs to its message, not a landmark of its own. The element stays an
-    // aside because the design's test hooks select aside[data-change-order-id].
-    <aside
-      id={noteId(order)}
-      role="note"
-      className={`margin-note scroll-mt-6 border-l-2 pl-4 ${noteLine[order.status]}`}
-      data-animate={open}
-      data-change-order-id={order.id}
-      data-status={order.status}
-    >
-      {/* Takes focus after an action (the pressed button is gone), and announces the new status. */}
-      <p id={statusLineId(order)} role="status" tabIndex={-1} className={`text-sm font-semibold ${statusColor[order.status]}`}>
-        {open ? "Not in the agreed scope" : statusLine(order)}
-      </p>
-      <p className="sr-only">Marked in the message: “{quote}”</p>
-      <p id={titleId(order)} className="mt-1 font-serif text-[17px] leading-snug">
-        {order.title}
-      </p>
-      <p className="mt-1 tabular-nums">
-        <span className="font-semibold">+{formatUsd(order.amountCents)}</span>
-        <span className="ml-2 text-sm text-ink-soft">{moreDays(order.extraDays)}</span>
-      </p>
-      {open && <p className="mt-3 text-sm leading-relaxed text-ink-soft">{reason}</p>}
-      {/* Rendered for every status (it draws nothing once paid or waived), so it stays mounted through the
-          refresh after an action and can move focus to the status line. */}
-      <ChangeOrderActions
-        order={{ id: order.id, status: order.status, payerViewUrl: order.payerViewUrl, hasInvoice: order.paypalInvoiceId !== null }}
-        sendBlockedReason={sendBlockedReason}
-        statusLineId={statusLineId(order)}
-      />
-    </aside>
-  );
-}
-
-interface ScopePanelProps {
-  data: WorkspaceData;
-}
-
-function ScopePanel({ data }: ScopePanelProps) {
-  const { project, scopeItems, changeOrders, totals } = data;
-
-  return (
-    <section aria-labelledby="scope-title" className="rounded-md border border-rule bg-sheet px-6 py-6">
-      <h2 id="scope-title" className="font-serif text-[22px]">
-        Scope
-      </h2>
-      <p className="text-sm text-ink-soft">Version 1, agreed {formatShortDate(project.agreedOn)}</p>
-      <ul className="mt-4 divide-y divide-rule border-y border-rule">
-        {scopeItems.map((item) => (
-          <li key={item.id} className="flex justify-between gap-4 py-2.5">
-            <span className="font-serif">{item.title}</span>
-            <span className="tabular-nums">{formatUsd(item.amountCents)}</span>
-          </li>
-        ))}
-      </ul>
-
-      <h3 className="mt-7 font-serif text-[18px]">Change orders</h3>
-      <ul className="mt-2 divide-y divide-rule border-y border-rule">
-        {changeOrders.map((o) => {
-          const struck = notCounted(o.status) ? "text-ink-soft line-through" : "";
-          return (
-            <li key={o.id} className="py-2.5">
-              <div className="flex justify-between gap-4">
-                <span className={`font-serif ${struck}`}>{o.title}</span>
-                <span className={`tabular-nums ${struck}`}>+{formatUsd(o.amountCents)}</span>
-              </div>
-              <p className={`text-sm font-semibold ${statusColor[o.status]}`}>{statusLine(o)}</p>
-            </li>
-          );
-        })}
-      </ul>
-
-      <dl className="mt-5 space-y-1 tabular-nums">
-        <div className="flex justify-between text-ink-soft">
-          <dt>Agreed</dt>
-          <dd>{formatUsd(totals.agreedCents)}</dd>
-        </div>
-        <div className="flex justify-between text-ink-soft">
-          <dt>Change orders</dt>
-          <dd>+{formatUsd(totals.changeOrdersCents)}</dd>
-        </div>
-        <div className="flex justify-between border-t border-rule pt-2 text-[18px] font-semibold">
-          <dt>Total</dt>
-          <dd className={totals.hasUnpaid ? "text-mark" : "text-paid"}>{formatUsd(totals.totalCents)}</dd>
-        </div>
-      </dl>
-    </section>
-  );
-}
-
-const actorText: Record<ActivityActor, string> = {
-  app: "Tollgate",
-  claude: "Claude",
-  paypal: "PayPal",
-};
-
-interface ActivityPanelProps {
-  activity: readonly ActivityEvent[];
-}
-
-// What happened, in order. It only explains: nothing here can start a PayPal call.
-function ActivityPanel({ activity }: ActivityPanelProps) {
-  return (
-    <section aria-labelledby="activity-title" className="rounded-md border border-rule bg-sheet px-6 py-6" data-testid="activity-panel">
-      <h2 id="activity-title" className="font-serif text-[22px]">
-        Activity
-      </h2>
-      <p className="text-sm text-ink-soft">Claude proposes. Nothing reaches PayPal until you press a button.</p>
-      {activity.length === 0 ? (
-        <p className="mt-4 border-t border-rule pt-3 text-sm leading-relaxed text-ink-soft">
-          Nothing yet. Check a message or send a change order, and each step shows up here.
+      {/* The slot new tickets print out of. */}
+      <div aria-hidden="true" className="ticket-slot relative z-10 mt-3" />
+      {entries.length === 0 ? (
+        <p className="mt-3 text-[14px] leading-relaxed text-ink-2">
+          No tickets yet. When Claude finds a request outside the agreed scope, it prints a ticket here.
         </p>
       ) : (
-        <ol className="mt-4 divide-y divide-rule border-y border-rule">
-          {activity.map((event) => (
-            <li key={event.id} className="py-2.5 text-sm leading-relaxed" data-kind={event.kind}>
-              <span className="font-semibold">{actorText[event.actor]}</span> {event.summary}
+        <ol className="ticket-row -mx-4 -mt-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pt-0 pb-3 sm:-mx-8 sm:px-8 lg:mx-0 lg:flex-col lg:gap-4 lg:overflow-visible lg:px-2 lg:pb-0">
+          {entries.map((e) => (
+            <li key={e.finding.id} className="w-[min(360px,calc(100vw-56px))] shrink-0 snap-start lg:w-auto">
+              <Ticket order={e.order} finding={e.finding} author={e.author} askedOn={e.askedOn} sendBlockedReason={sendBlockedReason} />
             </li>
           ))}
         </ol>

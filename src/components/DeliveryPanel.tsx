@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { formatShortDate } from "@/domain/dates";
 import type { DeliveryPlan, DeliveryRow, DeliveryState } from "@/domain/delivery";
 
@@ -14,16 +15,15 @@ interface LockMarkProps {
   open: boolean;
 }
 
-const lineColor: Record<DeliveryState, string> = {
-  locked: "border-mark",
-  unlocked: "border-paid",
-  included: "border-rule",
-};
+interface RoadProps {
+  plan: DeliveryPlan;
+  rows: readonly DeliveryRow[];
+}
 
 const textColor: Record<DeliveryState, string> = {
-  locked: "text-mark",
-  unlocked: "text-paid",
-  included: "text-ink-soft",
+  locked: "text-stop-ink",
+  unlocked: "text-go",
+  included: "text-ink-2",
 };
 
 function stateText(row: DeliveryRow): string {
@@ -39,51 +39,62 @@ function stateText(row: DeliveryRow): string {
 
 const dayCount = (days: number) => `${days} ${days === 1 ? "day" : "days"}`;
 
-// The product's promise on one card: extra work stays locked until its change order is paid, and paying it moves the
-// launch. Everything comes from domain/delivery.ts; this only draws it.
+// Work already in the launch comes first, then the gate, then the locked work behind it.
+const inLaunchFirst = (rows: readonly DeliveryRow[]) => [...rows.filter((r) => r.state !== "locked"), ...rows.filter((r) => r.state === "locked")];
+
+// The product's promise as a road: from the agreed launch, each change order is a stretch of days. Locked stretches
+// carry barrier stripes until paid; paid ones are solid GO, included ones grey. The launch date sits at the gate
+// between them. Everything comes from domain/delivery.ts; this only draws it, and each row says its state in words.
 export function DeliveryPanel({ plan, className = "" }: DeliveryPanelProps) {
   const agreed = formatShortDate(plan.agreedLaunch);
   const launch = formatShortDate(plan.launch);
+  const rows = inLaunchFirst(plan.rows);
 
   return (
-    <section aria-labelledby="delivery-title" className={`rounded-md border border-rule bg-sheet px-6 py-6 ${className}`} data-testid="delivery-panel">
-      <h2 id="delivery-title" className="font-serif text-[22px]">
-        Delivery
-      </h2>
-      <p className="text-sm text-ink-soft">Extra work stays locked until it&apos;s paid.</p>
+    <section aria-labelledby="delivery-title" className={`rounded-[10px] border border-line bg-surface px-5 py-5 ${className}`} data-testid="delivery-panel">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 id="delivery-title" className="font-display text-[20px] leading-tight font-bold">
+            Delivery
+          </h2>
+          <p className="mt-1 text-[14px] text-ink-2">Extra work stays locked until it&apos;s paid.</p>
+        </div>
+        <dl className="shrink-0 text-right" data-testid="delivery-launch" data-fx-launch="">
+          <dt className="font-display text-[13px] font-bold text-ink-2">Launch</dt>
+          <dd className="font-mono text-[20px] leading-tight font-semibold">
+            {plan.moved ? (
+              <>
+                <span className="sr-only">
+                  agreed {agreed}, now {launch}
+                </span>
+                <span aria-hidden="true">
+                  <s className="launch-was text-[15px] font-normal text-ink-2 decoration-ink-2">{agreed}</s>
+                  <span className="mx-1.5 text-[15px] font-normal text-ink-2">→</span>
+                  <span className="launch-now">{launch}</span>
+                </span>
+              </>
+            ) : (
+              <span className="launch-now">{launch}</span>
+            )}
+          </dd>
+        </dl>
+      </div>
 
-      <dl className="mt-4 flex items-baseline justify-between gap-4 border-y border-rule py-3 tabular-nums" data-testid="delivery-launch">
-        <dt>Launch</dt>
-        <dd className="text-[18px]">
-          {plan.moved ? (
-            <>
-              <span className="sr-only">
-                agreed {agreed}, now {launch}
-              </span>
-              <span aria-hidden="true">
-                <span className="text-ink-soft line-through decoration-ink-soft/60">{agreed}</span>
-                <span className="mx-1.5 text-ink-soft">→</span>
-                <span className="font-semibold">{launch}</span>
-              </span>
-            </>
-          ) : (
-            <span className="font-semibold">{launch}</span>
-          )}
-        </dd>
-      </dl>
-
-      {plan.rows.length === 0 ? (
-        <p className="mt-3 text-sm leading-relaxed text-ink-soft">No change orders yet, so the launch is as agreed.</p>
+      {rows.length === 0 ? (
+        <p className="mt-4 border-t border-line pt-3 text-[14px] leading-relaxed text-ink-2">No change orders yet, so the launch is as agreed.</p>
       ) : (
-        <ul className="mt-4 space-y-4">
-          {plan.rows.map((row) => (
-            <DeliveryItem key={row.orderId} row={row} />
-          ))}
-        </ul>
+        <>
+          <Road plan={plan} rows={rows} />
+          <ul className="mt-4 divide-y divide-line border-t border-line">
+            {rows.map((row) => (
+              <DeliveryItem key={row.orderId} row={row} />
+            ))}
+          </ul>
+        </>
       )}
 
       {plan.lockedDays > 0 && (
-        <p className="mt-4 text-sm leading-relaxed text-ink-soft">
+        <p className="mt-3 text-[14px] leading-relaxed text-ink-2">
           Paying the locked work moves the launch to <span className="whitespace-nowrap">{formatShortDate(plan.launchIfPaid)}.</span>
         </p>
       )}
@@ -91,21 +102,63 @@ export function DeliveryPanel({ plan, className = "" }: DeliveryPanelProps) {
   );
 }
 
+// Decorative: the rows below say the same in words.
+function Road({ plan, rows }: RoadProps) {
+  const weight = (row: DeliveryRow) => Math.max(row.days, 1);
+  const total = rows.reduce((sum, row) => sum + weight(row), 0);
+  const inLaunch = rows.filter((row) => row.state !== "locked").reduce((sum, row) => sum + weight(row), 0);
+  const gateAt = Math.round((inLaunch / total) * 100);
+  const hasLocked = plan.lockedDays > 0 || rows.some((row) => row.state === "locked");
+  // The launch label sits over the gate, leaning away from whichever end is nearer so it never leaves the road.
+  const gateLabel: CSSProperties = gateAt <= 50 ? { left: `${gateAt}%` } : { right: `${100 - gateAt}%` };
+
+  return (
+    <div aria-hidden="true" className="mt-5 font-mono text-[12px] text-ink-2">
+      <div className="relative h-5">
+        <span className="absolute bottom-0 whitespace-nowrap text-ink" style={gateLabel}>
+          <span className="font-semibold">{formatShortDate(plan.launch)}</span> launch
+        </span>
+      </div>
+      <div className="relative mt-1 flex items-center gap-[3px]">
+        <span className="h-6 w-[3px] shrink-0 rounded-sm bg-ink" />
+        {rows.map((row) => (
+          <span key={row.orderId} className="road-seg" data-state={row.state} data-fx-order={row.orderId} style={{ flexGrow: weight(row), flexBasis: 0 }}>
+            <span className="hatch" />
+          </span>
+        ))}
+        {/* The gate: a post with its lamp, between the work already in the launch and the work behind it. */}
+        <span className="absolute -top-1 h-8 w-[3px] -translate-x-1/2 rounded-sm bg-ink" style={{ left: `calc(${gateAt}% + 1px)` }}>
+          <span className={`absolute -top-1.5 -left-[3px] h-[9px] w-[9px] rounded-full ${hasLocked ? "bg-stop" : "bg-go"}`} />
+        </span>
+      </div>
+      <div className="mt-2 flex justify-between gap-4">
+        <span>{formatShortDate(plan.agreedLaunch)} agreed</span>
+        {hasLocked && <span>{formatShortDate(plan.launchIfPaid)} if paid</span>}
+      </div>
+    </div>
+  );
+}
+
 function DeliveryItem({ row }: DeliveryItemProps) {
   const locked = row.state === "locked";
   return (
-    <li className={`border-l-2 pl-3 ${lineColor[row.state]}`} data-change-order-id={row.orderId} data-delivery-state={row.state}>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="font-serif leading-snug">{row.title}</span>
-        {/* Locked days aren't in the launch yet, so they read as a quiet estimate rather than a "+". */}
-        <span className={`shrink-0 text-sm tabular-nums ${locked ? "text-ink-soft" : ""}`}>
-          {locked ? dayCount(row.days) : `+${dayCount(row.days)}`}
-        </span>
+    <li className="flex gap-3 py-3" data-change-order-id={row.orderId} data-delivery-state={row.state}>
+      <span className="road-seg swatch mt-1.5" data-state={row.state} data-fx-order={row.orderId}>
+        <span className="hatch" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="font-display text-[15px] leading-snug font-semibold">{row.title}</span>
+          {/* Locked days aren't in the launch yet, so they read as a quiet estimate rather than a "+". */}
+          <span className={`shrink-0 font-mono text-[13px] ${locked ? "text-ink-2" : "text-ink"}`}>
+            {locked ? dayCount(row.days) : `+${dayCount(row.days)}`}
+          </span>
+        </div>
+        <p className={`mt-0.5 flex items-center gap-1.5 text-[14px] font-semibold ${textColor[row.state]}`}>
+          <LockMark open={!locked} />
+          {stateText(row)}
+        </p>
       </div>
-      <p className={`mt-0.5 flex items-center gap-1.5 text-sm font-semibold ${textColor[row.state]}`}>
-        <LockMark open={!locked} />
-        {stateText(row)}
-      </p>
     </li>
   );
 }

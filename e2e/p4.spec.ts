@@ -85,20 +85,21 @@ test("머리말은 'Total with changes'와 아직 받지 못한 금액을 보여
   await expect(page.getByText("Waiting for your review")).toHaveCount(0);
 });
 
-test("범위 패널의 Total은 미결제가 있으면 보라, 모두 정리되면 초록이고 받을 금액 줄이 사라진다", async ({ browser }) => {
+test("범위 패널의 Total은 미결제가 있으면 STOP, 모두 정리되면 GO이고 받을 금액이 'All paid'로 바뀐다", async ({ browser }) => {
   const context = await browser.newContext({ reducedMotion: "reduce" });
   const page = await context.newPage();
   await page.goto("/");
-  const scopeTotal = page.locator("dl.mt-5 div").last().locator("dd");
-  await expect(scopeTotal).toHaveClass(/text-mark/);
+  const scopeTotal = page.getByTestId("scope-totals").locator("div").last().locator("dd");
+  await expect(scopeTotal).toHaveAttribute("data-tone", "stop");
 
   await page.getByRole("button", { name: "Include at no charge", exact: true }).click();
   await page.getByRole("button", { name: "Confirm: include at no charge", exact: true }).click();
 
-  await expect(scopeTotal).toHaveClass(/text-paid/);
+  await expect(scopeTotal).toHaveAttribute("data-tone", "go");
   await expect(page.getByTestId("header-total")).not.toContainText("not paid yet");
+  await expect(page.getByTestId("header-total")).toContainText("All paid");
   const included = page.getByTestId("delivery-panel").locator("[data-delivery-state='included']");
   await expect(included).toContainText("Included at no charge");
-  await expect(included).toHaveClass(/border-rule/);
+  await expect(included.locator(".swatch")).toHaveAttribute("data-state", "included");
   await context.close();
 });

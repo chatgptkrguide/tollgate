@@ -21,7 +21,7 @@ interface StepProps {
   children: ReactNode;
 }
 
-const LINK = "font-semibold underline decoration-mark underline-offset-4 hover:decoration-ink";
+const LINK = "font-semibold underline decoration-stop decoration-2 underline-offset-4 hover:decoration-ink";
 
 // What a first-time visitor (usually a judge) needs before touching anything: what Tollgate does, the three steps
 // to try, and that the copy is theirs. A <details> element, so it folds without extra code and stays reachable by
@@ -31,21 +31,21 @@ export function DemoGuide({ client, reviewBlockedReason, target, defaultOpen }: 
   const [open] = useState(defaultOpen);
 
   return (
-    <details open={open} className="group border-b border-rule bg-paper" data-testid="demo-guide">
-      <summary className="mx-auto flex max-w-6xl cursor-pointer list-none items-baseline justify-between gap-4 px-4 py-3 text-sm sm:px-8 [&::-webkit-details-marker]:hidden">
+    <details open={open} className="group border-b border-line bg-canvas" data-testid="demo-guide">
+      <summary className="mx-auto flex min-h-11 max-w-[1280px] cursor-pointer list-none items-baseline justify-between gap-4 px-4 py-3 text-[14px] sm:px-8 [&::-webkit-details-marker]:hidden">
         <span>
-          <span className="font-semibold">How this demo works.</span>{" "}
-          <span className="text-ink-soft">
+          <span className="font-display font-bold">How this demo works.</span>{" "}
+          <span className="text-ink-2">
             Tollgate finds the extra work hiding in a client&apos;s message and bills it through PayPal before you build it.
           </span>
         </span>
-        <span className="shrink-0 text-ink-soft underline underline-offset-4">
+        <span className="shrink-0 font-display font-bold text-ink-2 underline decoration-line decoration-2 underline-offset-4 group-hover:decoration-ink-2">
           <span className="group-open:hidden">Show</span>
           <span className="hidden group-open:inline">Hide</span>
         </span>
       </summary>
-      <div className="mx-auto max-w-6xl px-4 pb-4 sm:px-8">
-        <ol className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
+      <div className="mx-auto max-w-[1280px] px-4 pb-4 sm:px-8">
+        <ol className="grid gap-x-8 gap-y-3 text-[14px] sm:grid-cols-3">
           <Step n={1}>
             {reviewBlockedReason === null ? (
               <>
@@ -83,7 +83,7 @@ export function DemoGuide({ client, reviewBlockedReason, target, defaultOpen }: 
             )}
           </Step>
         </ol>
-        <p className="mt-3 text-xs text-ink-soft">
+        <p className="mt-3 text-[13px] text-ink-2">
           This copy is yours alone; <b className="font-semibold">Reset demo</b> puts it back. PayPal runs in sandbox mode,
           so no real money moves.
         </p>
@@ -95,7 +95,7 @@ export function DemoGuide({ client, reviewBlockedReason, target, defaultOpen }: 
 function Step({ n, children }: StepProps) {
   return (
     <li className="flex gap-3">
-      <span aria-hidden className="font-serif text-[20px] leading-none text-ink-soft tabular-nums">
+      <span aria-hidden className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink pt-0.5 font-mono text-[12px] font-semibold text-white">
         {n}
       </span>
       <span className="leading-relaxed">{children}</span>

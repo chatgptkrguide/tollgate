@@ -13,7 +13,7 @@ export default defineConfig({
   retries: 0,
   use: { channel: "chrome", headless: true },
   projects: [
-    { name: "no-paypal", testMatch: /(smoke|p1|p4|p6)\.spec\.ts/, use: { baseURL: `http://localhost:${NO_PAYPAL_PORT}` } },
+    { name: "no-paypal", testMatch: /(smoke|p1|p4|p6|ticket)\.spec\.ts/, use: { baseURL: `http://localhost:${NO_PAYPAL_PORT}` } },
     { name: "paypal", testMatch: /p2.*\.spec\.ts/, use: { baseURL: `http://localhost:${PAYPAL_PORT}` } },
   ],
   webServer: [
