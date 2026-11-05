@@ -25,7 +25,8 @@ interface StepProps {
   children: ReactNode;
 }
 
-const LINK = "font-semibold underline decoration-stop decoration-2 underline-offset-4 hover:decoration-ink";
+// Links underline in ink: STOP red is kept for unpaid and locked work only.
+const LINK = "font-semibold underline decoration-ink-2 decoration-2 underline-offset-4 hover:decoration-ink";
 
 // What a first-time visitor (usually a judge) needs before touching anything: what Tollgate does, the three steps
 // to try, and that the copy is theirs. A <details> element, so it folds without extra code and stays reachable by

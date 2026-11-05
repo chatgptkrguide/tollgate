@@ -52,7 +52,7 @@ export function Conversation({ messages, clientName, client, reviewBlockedReason
           {client} · {clientName}
         </p>
       </div>
-      <ThreadScroll count={messages.length} className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-6 sm:px-6">
+      <ThreadScroll count={messages.length} className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-6 sm:px-6 lg:[mask-image:linear-gradient(to_bottom,transparent,black_28px)]">
         {messages.map((m) => (
           <MessageBubble key={m.id} message={m} locale={locale} />
         ))}
