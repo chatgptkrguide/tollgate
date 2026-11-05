@@ -69,11 +69,14 @@ describe("번역 사전의 완전성", () => {
   });
 
   it("영어가 아닌 사전은 영어 문장을 그대로 베껴 두지 않는다(제품명만인 문장 제외)", () => {
-    // A handful of texts are the same word in some languages ("Total", "Pago"…); a long one copied is a slip.
+    // A handful of texts are the same word in some languages ("Total", "Pago"…); a long one copied is a slip. A few
+    // are the same on purpose: "ticket" is the word Spanish and Portuguese screens use, and "{author}, {date}:" is
+    // only punctuation.
+    const sameOnPurpose = new Set(["tickets.count_one", "tickets.count_other", "ticket.asked"]);
     const copied = others.flatMap((locale) => {
       const catalog = flatten(CATALOGS[locale]);
       return Object.keys(english)
-        .filter((key) => english[key].length > 12 && catalog[key] === english[key])
+        .filter((key) => !sameOnPurpose.has(key) && english[key].length > 12 && catalog[key] === english[key])
         .map((key) => `${locale}:${key}`);
     });
 

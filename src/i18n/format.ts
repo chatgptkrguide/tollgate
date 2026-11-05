@@ -9,6 +9,7 @@ interface Formatters {
   exactUsd: Intl.NumberFormat;
   number: Intl.NumberFormat;
   shortDate: Intl.DateTimeFormat;
+  dateTime: Intl.DateTimeFormat;
 }
 
 const cache = new Map<Locale, Formatters>();
@@ -23,6 +24,7 @@ function formatters(locale: Locale): Formatters {
     number: new Intl.NumberFormat(tag, { maximumFractionDigits: 2 }),
     // The time zone is fixed, so the server (UTC) and a browser elsewhere print the same day and hydration agrees.
     shortDate: new Intl.DateTimeFormat(tag, { month: "short", day: "numeric", timeZone: "UTC" }),
+    dateTime: new Intl.DateTimeFormat(tag, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" }),
   };
   cache.set(locale, made);
   return made;
@@ -44,4 +46,11 @@ export function formatNumber(locale: Locale, value: number): string {
 export function formatDate(locale: Locale, iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : formatters(locale).shortDate.format(date);
+}
+
+// An ISO time → "Nov 5, 14:03", "11월 5일 14:03", "11月5日 14:03" (24-hour, UTC, for the activity steps); "" when it
+// isn't a time. The caller adds "UTC".
+export function formatDateTime(locale: Locale, iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "" : formatters(locale).dateTime.format(date);
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ActionError, PayPalActionError } from "@/domain/action-result";
 import { formatShortDate } from "@/domain/dates";
 import { formatUsd } from "@/domain/money";
-import { formatDate, formatMoney, formatNumber } from "./format";
+import { formatDate, formatDateTime, formatMoney, formatNumber } from "./format";
 import type { Locale } from "./locales";
 import { interpolate, splitRich, t, tCount, tRich } from "./t";
 
@@ -55,7 +55,7 @@ describe("tCount(): 복수형", () => {
   it("영어는 1이면 단수, 그 밖은 복수를 고른다", () => {
     expect(tCount("en", "delivery.days", 1)).toBe("1 day");
     expect(tCount("en", "delivery.days", 3)).toBe("3 days");
-    expect(tCount("en", "workspace.moreDays", 0)).toBe("about 0 more days");
+    expect(tCount("en", "activity.steps", 0)).toBe("0 steps");
   });
 
   it("한국어·일본어는 형태가 하나라 _other를 쓴다", () => {
@@ -127,6 +127,24 @@ describe("숫자·금액·날짜 표기", () => {
   it("날짜는 UTC 기준 그 언어의 짧은 표기다", () => {
     expect(formatDate("ko", "2026-10-21T23:30:00Z")).toBe("10월 21일");
     expect(formatDate("ja", "2026-10-21")).toBe("10月21日");
+  });
+
+  it("진행 기록 시각은 UTC 24시간제로, 영어는 전과 똑같이 쓴다", () => {
+    const iso = "2026-11-05T04:03:00Z";
+
+    const [en, ko, ja] = (["en", "ko", "ja"] as const).map((locale) => formatDateTime(locale, iso));
+
+    expect(en).toBe("Nov 5, 04:03");
+    expect(ko).toBe("11월 5일 04:03");
+    expect(ja).toBe("11月5日 04:03");
+  });
+
+  it("진행 기록 시각이 날짜가 아니면 빈 문자열이다", () => {
+    expect(formatDateTime("en", "not a time")).toBe("");
+  });
+
+  it("자정 직전 UTC 시각은 브라우저 시간대와 상관없이 그날로 쓴다", () => {
+    expect(formatDateTime("es", "2026-12-31T23:59:00Z")).toBe("31 dic, 23:59");
   });
 
   it("시간 같은 숫자는 소수 둘째 자리까지 그 언어 표기로 쓴다", () => {

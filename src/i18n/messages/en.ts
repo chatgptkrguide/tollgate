@@ -5,8 +5,9 @@
 // - {name} is filled by t(); a value that isn't given stays as written.
 // - Keys ending in _one / _other are plural forms, picked by tCount() with Intl.PluralRules. Every locale has both,
 //   even where the language doesn't inflect (ko, ja): there they read the same.
-// - <b>…</b>, <link>…</link> and <nowrap>…</nowrap> mark parts the component styles (bold, an in-page link, a span
-//   that mustn't wrap); tRich() splits them out. Translations move the tags with the words they wrap.
+// - <b>…</b>, <link>…</link>, <nowrap>…</nowrap> and <sr>…</sr> mark parts the component styles (bold, an in-page link,
+//   a span that mustn't wrap, text only screen readers read); tRich() splits them out. Translations move the tags
+//   with the words they wrap.
 // - Product names (Tollgate, PayPal, Claude) are never translated.
 // - Not here on purpose, because they are data rather than interface: the seeded demo conversation (client and
 //   "You" messages, the client and project names, scope item and change order titles, finding reasons), the
@@ -29,25 +30,51 @@ export const en = {
   },
   clientLocale: {
     label: "Client's language",
-    help: "PayPal invoices for this client are written in this language. Amounts stay in USD.",
+    help: "New PayPal invoices are written in this language.",
     saveFailed: "The client's language couldn't be saved. Try again.",
   },
   workspace: {
     agreed: "Agreed",
     totalWithChanges: "Total with changes",
     notPaidYet: "{amount} not paid yet",
-    conversationWith: "Conversation with {client}",
     you: "You",
-    notInScope: "Not in the agreed scope",
-    markedInMessage: "Marked in the message: “{quote}”",
-    moreDays_one: "about {count} more day",
-    moreDays_other: "about {count} more days",
     statusDraft: "Not sent yet",
     statusSent: "Sent to client, not paid yet",
     statusPaid: "Paid",
     statusPaidOn: "Paid {date}",
     statusWaived: "Included at no charge",
     statusCancelled: "Cancelled",
+    agreedOn: "agreed {date}",
+    allPaid: "All paid",
+  },
+  conversation: {
+    title: "Conversation<sr> with {client}</sr>",
+    ticketsFromMessage_one: "{count} ticket from this message",
+    ticketsFromMessage_other: "{count} tickets from this message",
+  },
+  tickets: {
+    title: "Tickets",
+    count_one: "{count} ticket",
+    count_other: "{count} tickets",
+    open_one: "{count} open",
+    open_other: "{count} open",
+    empty: "No tickets yet. When Claude finds a request outside the agreed scope, it prints a ticket here.",
+  },
+  ticket: {
+    label: "TICKET",
+    hours: "≈ {hours} h",
+    asked: "{author}, {date}:",
+    showInMessage: "Show in the message: ",
+    notInScope: "Not in the agreed scope.",
+    gateLocked: "Work locked until paid",
+    gateUnlocked: "Work unlocked",
+    gateWaived: "Work unlocked, not billed",
+    gateCancelled: "Work called off",
+    stampSent: "Sent · PayPal",
+    stampPaid: "Paid",
+    stampPaidOn: "Paid · {date}",
+    stampWaived: "No charge",
+    stampVoid: "Void",
   },
   scope: {
     title: "Scope",
@@ -56,11 +83,16 @@ export const en = {
     agreed: "Agreed",
     changeOrdersTotal: "Change orders",
     total: "Total",
+    none: "None yet.",
   },
   activity: {
     title: "Activity",
     lead: "Claude proposes. Nothing reaches PayPal until you press a button.",
     empty: "Nothing yet. Check a message or send a change order, and each step shows up here.",
+    steps_one: "{count} step",
+    steps_other: "{count} steps",
+    earlier_one: "{count} earlier step",
+    earlier_other: "{count} earlier steps",
   },
   changeOrder: {
     send: "Send change order",
@@ -156,6 +188,9 @@ export const en = {
     included: "Included at no charge",
     days_one: "{count} day",
     days_other: "{count} days",
+    roadLaunch: "<b>{date}</b> launch",
+    roadAgreed: "{date} agreed",
+    roadIfPaid: "{date} if paid",
   },
   guide: {
     summaryTitle: "How this demo works.",
