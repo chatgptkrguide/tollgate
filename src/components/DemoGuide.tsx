@@ -43,7 +43,7 @@ export function DemoGuide({ client, reviewBlockedReason, target, defaultOpen, lo
 
   return (
     <details open={open} className="group border-b border-line bg-canvas" data-testid="demo-guide">
-      <summary className="mx-auto flex min-h-11 max-w-[1280px] cursor-pointer list-none items-baseline justify-between gap-4 px-4 py-3 text-[14px] sm:px-8 [&::-webkit-details-marker]:hidden">
+      <summary className="mx-auto flex min-h-11 max-w-[1280px] cursor-pointer list-none items-baseline justify-between gap-4 px-4 py-2.5 text-[14px] sm:px-8 [&::-webkit-details-marker]:hidden">
         <span>
           <span className="font-display font-bold">{t(locale, "guide.summaryTitle")}</span>{" "}
           <span className="text-ink-2">{t(locale, "guide.summaryText")}</span>
@@ -53,8 +53,8 @@ export function DemoGuide({ client, reviewBlockedReason, target, defaultOpen, lo
           <span className="hidden group-open:inline">{t(locale, "guide.hide")}</span>
         </span>
       </summary>
-      <div className="mx-auto max-w-[1280px] px-4 pb-4 sm:px-8">
-        <ol className="grid gap-x-8 gap-y-3 text-[14px] sm:grid-cols-3">
+      <div className="mx-auto max-w-[1280px] px-4 pb-3 sm:px-8">
+        <ol className="grid gap-x-8 gap-y-2 text-[13px] sm:grid-cols-3">
           <Step n={1}>
             {reviewBlockedReason === null ? (
               <Rich parts={tRich(locale, "guide.step1Live", { client })} />
@@ -77,7 +77,7 @@ export function DemoGuide({ client, reviewBlockedReason, target, defaultOpen, lo
             )}
           </Step>
         </ol>
-        <p className="mt-3 text-[13px] text-ink-2">
+        <p className="mt-2 text-[12px] text-ink-2">
           <Rich parts={tRich(locale, "guide.footer")} boldClassName="font-semibold" />
         </p>
       </div>
@@ -91,7 +91,7 @@ function Step({ n, children }: StepProps) {
       <span aria-hidden className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink pt-0.5 font-mono text-[12px] font-semibold text-white">
         {n}
       </span>
-      <span className="leading-relaxed">{children}</span>
+      <span className="leading-normal">{children}</span>
     </li>
   );
 }

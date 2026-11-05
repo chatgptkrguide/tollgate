@@ -152,13 +152,13 @@ function ProjectHeader({ data, client, locale }: ProjectHeaderProps) {
 
   return (
     <header className="border-b border-line bg-surface">
-      <div className="mx-auto flex max-w-[1280px] flex-wrap items-end justify-between gap-x-10 gap-y-5 px-4 py-6 sm:px-8">
+      <div className="mx-auto flex max-w-[1280px] flex-wrap items-end justify-between gap-x-10 gap-y-4 px-4 py-5 sm:px-8">
         <div className="min-w-0">
           <h1 className="font-display text-[30px] leading-tight font-extrabold tracking-[-0.015em]">{project.clientName}</h1>
           <p className="mt-1 text-ink-2">
             {project.title} · {client} · {t(locale, "workspace.agreedOn", { date: formatDate(locale, project.agreedOn) })}
           </p>
-          <div className="mt-4">
+          <div className="mt-3">
             <ClientLocaleSelect
               projectId={project.id}
               clientLocale={project.clientLocale}
@@ -176,7 +176,7 @@ function ProjectHeader({ data, client, locale }: ProjectHeaderProps) {
           <div data-testid="header-total" data-fx-total="" data-tone={tone}>
             <dt className="font-display text-[13px] font-bold text-ink-2">{t(locale, "workspace.totalWithChanges")}</dt>
             <dd className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span className={`total-figure pt-1 font-display text-[44px] leading-none font-extrabold tracking-[-0.02em] tabular-nums ${totals.hasUnpaid ? "text-stop" : "text-go"}`}>
+              <span className={`total-figure pt-1 font-display text-[44px] leading-none font-extrabold tracking-[-0.02em] tabular-nums ${totals.hasUnpaid ? "text-ink" : "text-go"}`}>
                 <CountingAmount cents={totals.totalCents} locale={locale} />
               </span>
               <span className="chip">
