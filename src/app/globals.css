@@ -437,6 +437,12 @@ mark.scope-mark {
   75% { opacity: 1; transform: rotate(-4deg) scale(0.94); }
   100% { opacity: 1; transform: rotate(-4deg) scale(1); }
 }
+.ticket[data-fx="lift"] .lane-caption {
+  animation: caption-in 300ms ease-out 450ms backwards;
+}
+@keyframes caption-in {
+  from { opacity: 0; }
+}
 .road-seg[data-fx="lift"] > .hatch {
   animation: unhatch 600ms ease-out 250ms backwards;
 }
