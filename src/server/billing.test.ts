@@ -471,6 +471,35 @@ describe("견적 발송·취소·다시 견적", () => {
       expect(paypal.calls.create[0].description).toBe("Estimated 12.5 h at $50/h, rounded up to the next $10");
     });
 
+    it("프로젝트의 고객 언어가 ko면 항목 설명과 메모를 한국어로 쓰고, 금액·제목·수신인은 그대로다", async () => {
+      const draft = await orderOf(mine, "draft");
+      await db.update(projects).set({ clientLocale: "ko" }).where(eq(projects.id, mine));
+      const paypal = fakeGateway();
+
+      await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id);
+
+      expect(paypal.calls.create[0]).toEqual({
+        changeOrderId: draft.id,
+        title: "Loyalty page with customer login",
+        description: "예상 작업 13시간 × 시간당 US$50",
+        note: "Online ordering site 관련 추가 작업 청구서입니다. 처음 합의한 작업 범위에 포함되지 않은 항목입니다.",
+        amountCents: 65000,
+        recipient: { email: "maya@harborandpine.example", businessName: "Harbor & Pine Coffee" },
+      });
+    });
+
+    it("고객 언어가 ja이고 올림이 있으면 일본어 설명에 올림 단위를 적는다", async () => {
+      const draft = await orderOf(mine, "draft");
+      await db.update(projects).set({ clientLocale: "ja" }).where(eq(projects.id, mine));
+      await db.update(changeOrders).set({ hours: 12.5, amountCents: 63000 }).where(eq(changeOrders.id, draft.id));
+      const paypal = fakeGateway();
+
+      await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id);
+
+      expect(paypal.calls.create[0].description).toBe("見積作業時間 12.5 時間 × 時給 $50（$10 単位で切り上げ）");
+      expect(paypal.calls.create[0].amountCents).toBe(63000);
+    });
+
     it("작성 뒤 id를 저장하지 못한 견적을 다시 발송하면 번호로 같은 청구서를 찾아 쓰고 reused true로 남긴다", async () => {
       const draft = await orderOf(mine, "draft");
       const earlier = { ...createdDraft, detail: { ...createdDraft.detail, reference: draft.id, invoice_number: invoiceNumberFor(draft.id) } };

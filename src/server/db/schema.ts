@@ -3,6 +3,7 @@ import { check, index, integer, real, sqliteTable, text, uniqueIndex } from "dri
 // Relative imports: drizzle-kit loads this file without the "@/" path alias.
 import type { ActivityActor, ActivityDetail, ActivityKind } from "../../domain/activity";
 import { CHANGE_ORDER_STATUSES } from "../../domain/types";
+import { LOCALES } from "../../i18n/locales";
 import type { WebhookOutcome } from "../../domain/webhook";
 
 export const projects = sqliteTable(
@@ -21,12 +22,16 @@ export const projects = sqliteTable(
     // The empty default exists only so SQLite can add the column to a table that already has rows
     // (migration 0001 then copies created_at into it). Every write sets a real time; see DemoRows.
     lastSeenAt: text("last_seen_at").notNull().default(""),
+    // The language the client reads: the PayPal invoice's description and note are written in it. Added by migration
+    // 0007; the default puts every existing copy on English, which keeps their invoices exactly as before.
+    clientLocale: text("client_locale", { enum: LOCALES }).notNull().default("en"),
   },
   (t) => [
     // Cleanup looks up copies by last use every time a new copy is made.
     index("projects_last_seen_idx").on(t.lastSeenAt),
     check("projects_rate_positive", sql`${t.hourlyRateCents} > 0`),
     check("projects_hours_per_day_positive", sql`${t.hoursPerDay} > 0`),
+    check("projects_client_locale_known", sql.raw(`client_locale IN (${LOCALES.map((l) => `'${l}'`).join(", ")})`)),
   ],
 );
 
