@@ -11,6 +11,7 @@ const draftId = async (page: Page) => (await page.locator("aside.ticket[data-sta
 
 async function setOrder(id: string, sql: string, args: (string | null)[] = []) {
   const db = createClient({ url: DB_URL });
+  await db.execute("PRAGMA busy_timeout = 5000"); // the server may be writing the same file (SQLITE_BUSY otherwise)
   await db.execute({ sql: `UPDATE change_orders SET ${sql} WHERE id = ?`, args: [...args, id] });
   db.close();
 }
