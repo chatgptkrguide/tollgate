@@ -35,7 +35,7 @@ describe("작업 화면 조회", () => {
       ["Gift card page", "paid"],
       ["Loyalty page with customer login", "draft"],
     ]);
-    expect(data?.totals).toEqual({ agreedCents: 240000, changeOrdersCents: 90000, totalCents: 330000, paidCents: 25000, hasUnpaid: true });
+    expect(data?.totals).toEqual({ agreedCents: 240000, changeOrdersCents: 90000, totalCents: 330000, paidCents: 25000, unpaidCents: 65000, hasUnpaid: true });
   });
 
   it("납품 일정은 합의 출시일 Nov 15에 결제된 기프트카드 1일만 더하고 초안 로열티는 잠가 둔다", async () => {

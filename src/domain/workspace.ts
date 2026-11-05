@@ -17,8 +17,9 @@ export interface ThreadMessage extends Message {
 export interface ProjectTotals {
   agreedCents: number; // the agreed scope
   changeOrdersCents: number; // draft, sent and paid orders; waived and cancelled are shown but not counted
-  totalCents: number; // agreed + change orders ("With changes", "Total")
+  totalCents: number; // agreed + change orders ("Total with changes", "Total")
   paidCents: number; // paid orders only
+  unpaidCents: number; // draft and sent orders: billed or to be billed, not paid yet
   hasUnpaid: boolean; // a draft or sent order is still open
 }
 
@@ -42,6 +43,7 @@ export function projectTotals(
     changeOrdersCents,
     totalCents: agreedCents + changeOrdersCents,
     paidCents: sumCents(orders.filter((o) => o.status === "paid").map((o) => o.amountCents)),
+    unpaidCents: sumCents(orders.filter(isUnpaid).map((o) => o.amountCents)),
     hasUnpaid: orders.some(isUnpaid),
   };
 }
