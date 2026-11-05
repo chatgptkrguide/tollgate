@@ -49,18 +49,18 @@ Claude scope review: it works in a local run with a key (see below). On the publ
 All calls are sandbox REST calls made by the server, from a button the freelancer pressed. Claude never sees PayPal credentials.
 
 - **Invoicing API:** create a draft invoice, send it, read back the payer link, cancel a sent invoice.
-- **Idempotent invoice numbers:** the invoice number comes from the change order id, and the request carries a `PayPal-Request-Id`, so a double click or a retry cannot create a second invoice. The app saves the invoice id before it sends.
+- **Idempotent invoice numbers:** in our sandbox tests the Invoicing API ignored `PayPal-Request-Id`, so the app makes its own guard: the invoice number comes from the change order id, and the database marks a send before the call. A double click or a retry cannot create a second invoice. The app saves the invoice id before it sends.
 - **Webhooks:** PayPal posts `INVOICING.INVOICE.PAID` to `/api/webhooks/paypal`. The server checks the signature with PayPal's verify-webhook-signature call, records each event id once, and reads the invoice back before it marks anything paid (it also checks the amount and that the currency is USD). A request that fails verification is refused.
 - **Check payment fallback:** if a webhook is late or lost, one button reads the invoice from PayPal and applies the same rule. A webhook and a click can't both change the status.
 
 ## How Claude is used
 
 Claude reviews each new client message against the agreed scope and returns structured findings: the exact quote, a title, an hours estimate and a reason. The app checks that each quote really appears in the message, then computes the price itself (hours x hourly rate). The person decides what to send. Claude does not set prices, create or send invoices, or call PayPal.
-Locally, a set of six test messages passes (`pnpm eval:review`). Claude Code also helped build this project; see the last section.
+Calls are capped: 10 reviews per demo copy per day, and a per-minute and 100-per-day cap across the server; the counts live in the database, so resetting a copy does not refill them. Locally, a set of six test messages passes (`pnpm eval:review`). Claude Code also helped build this project; see the last section.
 
 ## Architecture in brief
 
-Next.js (App Router) server actions call plain TypeScript domain rules (`src/domain`: status transitions and money math in integer cents), a Drizzle database layer (SQLite locally, Turso on the demo), the PayPal REST client, and the Claude review. The browser sends ids, not amounts. The database repeats the core rules as CHECK constraints. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design; its build-status table is updated separately, so where it differs from this README, this README describes the current demo.
+Next.js (App Router) server actions call plain TypeScript domain rules (`src/domain`: status transitions and money math in integer cents), a Drizzle database layer (SQLite locally, Turso on the demo), the PayPal REST client, and the Claude review. The browser sends ids, not amounts. The database repeats the core rules as CHECK constraints. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
 
 ## Run locally
 
