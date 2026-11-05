@@ -26,10 +26,11 @@ These studies measure unpaid and late payment in general. They do not measure sc
 2. Claude compares it with the agreed scope and marks the phrases that add work. It estimates the hours. The price is hours x your hourly rate, computed by the app.
 3. You review the marks and send a change order. Tollgate creates and sends a PayPal invoice for it.
 4. When the client pays, a PayPal webhook marks the change order as paid and the project total turns green.
+5. The extra work was locked until then. The payment unlocks it, and the Delivery panel moves the launch date by the work's estimated days.
 
 The agent proposes; nothing is billed until you approve it. Every step Claude and the app take is written to an activity panel next to the workspace, including what was sent to PayPal.
 
-Coming (in progress, not in the live demo yet): a view where an unpaid change order holds its delivery date, and payment unlocks the work.
+Extra work stays locked until it is paid: the Delivery panel shows each change order as locked (purple) or unlocked (green), and the launch date only moves for work the client has paid for or that you chose to include for free.
 
 ## Try it
 
