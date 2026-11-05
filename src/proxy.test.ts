@@ -91,5 +91,6 @@ describe("방문자 쿠키 발급(proxy)", () => {
     expect(matches("/api/health")).toBe(false);
     expect(matches("/_next/static/x.js")).toBe(false);
     expect(matches("/favicon.ico")).toBe(false);
+    expect(matches("/icon.svg")).toBe(false);
   });
 });
