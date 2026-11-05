@@ -26,7 +26,8 @@ const demoProject = {
   hoursPerDay: HOURS_PER_DAY,
   agreedOn: "2026-10-21",
   dueOn: "2026-11-15",
-};
+  clientLocale: "en", // Maya writes in English; a visitor can switch it to see the invoice in another language
+} as const;
 
 const demoScope = [
   { title: "Landing page", amountCents: 90000 },

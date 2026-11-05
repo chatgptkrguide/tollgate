@@ -9,7 +9,7 @@ import { runMigrations } from "@/server/db/migrate";
 import { changeOrders, projects } from "@/server/db/schema";
 import { PayPalError } from "@/server/paypal/errors";
 import { newVisitorId, VISITOR_COOKIE } from "@/server/visitor";
-import { cancelChangeOrder, checkPayment, requoteChangeOrder, resetDemo, reviewMessage, sendChangeOrder, waiveChangeOrder } from "./actions";
+import { cancelChangeOrder, checkPayment, requoteChangeOrder, resetDemo, reviewMessage, sendChangeOrder, setClientLocale, waiveChangeOrder } from "./actions";
 
 // Only the framework edges are replaced: the request's cookies, the router refresh, which database to use,
 // and which PayPal to talk to (a stand-in; the real one is never called from unit tests).
@@ -583,5 +583,99 @@ describe("메시지 검토 액션", () => {
     request.cookies.set(VISITOR_COOKIE, visitorId);
     expect(await reviewMessage(null, form("Add a blog?"))).toEqual({ ok: false, error: "not_configured" });
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("고객 언어 액션", () => {
+  let db: Db;
+  const me = newVisitorId();
+  const someoneElse = newVisitorId();
+  let mine: string;
+  let theirs: string;
+
+  beforeEach(async () => {
+    db = createDb(":memory:");
+    await runMigrations(db);
+    request.db = db;
+    request.cookies.clear();
+    mine = (await ensureDemoCopy(db, me, NOW)).projectId;
+    theirs = (await ensureDemoCopy(db, someoneElse, NOW)).projectId;
+  });
+
+  const localeOf = async (projectId: string) =>
+    (await db.select({ clientLocale: projects.clientLocale }).from(projects).where(eq(projects.id, projectId)))[0]?.clientLocale;
+
+  it("새 데모 사본의 고객 언어는 en이다", async () => {
+    expect(await localeOf(mine)).toBe("en");
+  });
+
+  it("내 사본이면 고객 언어를 바꾸고 화면을 새로 그리게 refresh를 부른다", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+
+    const result = await setClientLocale(mine, "ja");
+
+    expect(result).toEqual({ ok: true });
+    expect(await localeOf(mine)).toBe("ja");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("다른 방문자의 사본은 not_found이고 그 사본의 언어는 그대로다", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+
+    const result = await setClientLocale(theirs, "ko");
+
+    expect(result).toEqual({ ok: false, error: "not_found" });
+    expect(await localeOf(theirs)).toBe("en");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("쿠키가 없거나 형식이 틀리면 not_found이고 아무것도 바꾸지 않는다", async () => {
+    expect(await setClientLocale(mine, "ko")).toEqual({ ok: false, error: "not_found" });
+    request.cookies.set(VISITOR_COOKIE, "forged");
+    expect(await setClientLocale(mine, "ko")).toEqual({ ok: false, error: "not_found" });
+
+    expect(await localeOf(mine)).toBe("en");
+  });
+
+  it.each([["fr"], ["KO"], [""], [null], [42], [["ko"]]])("지원하지 않는 언어 %j는 invalid_input이고 DB를 건드리지 않는다", async (locale) => {
+    request.cookies.set(VISITOR_COOKIE, me);
+
+    const result = await setClientLocale(mine, locale);
+
+    expect(result).toEqual({ ok: false, error: "invalid_input" });
+    expect(await localeOf(mine)).toBe("en");
+  });
+
+  it("사본 id 형식이 아니면 invalid_input이다(로컬 시드 id 'demo' 포함)", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+
+    expect(await setClientLocale("demo", "ko")).toEqual({ ok: false, error: "invalid_input" });
+    expect(await setClientLocale({ id: mine }, "ko")).toEqual({ ok: false, error: "invalid_input" });
+  });
+
+  it("쿠키는 맞지만 사본이 정리돼 없어졌으면 not_found다", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+    await db.delete(projects).where(eq(projects.id, mine));
+
+    expect(await setClientLocale(mine, "ko")).toEqual({ ok: false, error: "not_found" });
+  });
+
+  it("DB가 실패하면 server_error이고 refresh를 부르지 않는다", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+    db.$client.close();
+
+    const result = await setClientLocale(mine, "ko");
+
+    expect(result).toEqual({ ok: false, error: "server_error" });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("데모를 재설정하면 고객 언어도 en으로 돌아간다", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+    await setClientLocale(mine, "pt");
+
+    await resetDemo(null, form({ projectId: mine }));
+
+    expect(await localeOf(mine)).toBe("en");
   });
 });

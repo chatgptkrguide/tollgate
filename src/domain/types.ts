@@ -1,5 +1,7 @@
 // Core entities. Money is integer cents, dates are ISO strings (UTC).
 
+import type { Locale } from "../i18n/locales";
+
 export interface Project {
   id: string;
   clientName: string;
@@ -9,6 +11,7 @@ export interface Project {
   hoursPerDay: number;
   agreedOn: string;
   dueOn: string;
+  clientLocale: Locale; // the language the client reads; the PayPal invoice texts are written in it
 }
 
 export interface ScopeItem {

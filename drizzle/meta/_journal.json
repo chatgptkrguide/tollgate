@@ -50,6 +50,13 @@
       "when": 1793804758431,
       "tag": "0006_send_log_project",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793884724361,
+      "tag": "0007_projects_client_locale",
+      "breakpoints": true
     }
   ]
 }

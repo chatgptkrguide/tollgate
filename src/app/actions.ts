@@ -3,10 +3,12 @@
 import { refresh } from "next/cache";
 import { z } from "zod";
 import type { ActionResult, BillingActionResult, ResetActionResult, ReviewActionResult } from "@/domain/action-result";
+import { LOCALES } from "@/i18n/locales";
 import { cancelOwnedChangeOrder, liveBillingDeps, requoteOwnedChangeOrder, sendOwnedChangeOrder } from "@/server/billing";
 import { waiveOwnedChangeOrder } from "@/server/db/change-orders";
 import { checkOwnedPayment } from "@/server/payments";
 import { getDb } from "@/server/db/client";
+import { updateClientLocale } from "@/server/db/client-locale";
 import { resetDemoCopy } from "@/server/db/demo";
 import { liveReviewDeps, reviewOwnedMessage } from "@/server/review";
 import { currentProjectId } from "@/server/session";
@@ -17,6 +19,7 @@ import { currentProjectId } from "@/server/session";
 
 const changeOrderIdSchema = z.uuid();
 const demoProjectIdSchema = z.string().regex(/^v_[A-Za-z0-9_-]{22}$/);
+const localeSchema = z.enum(LOCALES);
 
 // A draft that already has a PayPal invoice is refused (invoice_exists); the page is refreshed then too, so the
 // note shows "Send again" in place of the stale waive button.
@@ -157,4 +160,27 @@ export async function reviewMessage(_prev: ReviewActionResult | null, formData: 
   }
   if (result.ok || result.error === "claude_unavailable" || result.error === "claude_refused") refresh();
   return result;
+}
+
+// Sets the language the client reads, which the next PayPal invoice for this copy is written in (description and note;
+// the amount stays USD). Called directly with two arguments, not from a form. Only the visitor's own copy can be
+// changed: someone else's copy and one that doesn't exist answer the same way. An invoice PayPal already has keeps its
+// words; only invoices created afterwards use the new language.
+export async function setClientLocale(projectId: unknown, locale: unknown): Promise<ActionResult> {
+  const id = demoProjectIdSchema.safeParse(projectId);
+  const chosen = localeSchema.safeParse(locale);
+  if (!id.success || !chosen.success) return { ok: false, error: "invalid_input" };
+
+  if (id.data !== (await currentProjectId())) return { ok: false, error: "not_found" };
+
+  let updated: boolean;
+  try {
+    updated = await updateClientLocale(getDb(), id.data, chosen.data);
+  } catch (error) {
+    console.error("saving the client language failed", error);
+    return { ok: false, error: "server_error" };
+  }
+  if (!updated) return { ok: false, error: "not_found" };
+  refresh();
+  return { ok: true };
 }

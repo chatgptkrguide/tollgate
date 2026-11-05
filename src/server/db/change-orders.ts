@@ -4,6 +4,7 @@ import type { DeliveryOrder } from "../../domain/delivery";
 import { canTransition } from "../../domain/change-order";
 import type { PaymentOrder } from "../../domain/payment";
 import type { ChangeOrderStatus } from "../../domain/types";
+import type { Locale } from "../../i18n/locales";
 import type { Db } from "./client";
 import { changeOrders, projects } from "./schema";
 
@@ -108,7 +109,7 @@ export interface BillingOrder {
   amountCents: number;
   status: ChangeOrderStatus;
   paypalInvoiceId: string | null;
-  project: { title: string; clientName: string; clientEmail: string; hourlyRateCents: number; hoursPerDay: number };
+  project: { title: string; clientName: string; clientEmail: string; hourlyRateCents: number; hoursPerDay: number; clientLocale: Locale };
 }
 
 export async function readBillingOrder(db: Db, ownerProjectId: string, changeOrderId: string): Promise<BillingOrder | null> {
@@ -127,6 +128,7 @@ export async function readBillingOrder(db: Db, ownerProjectId: string, changeOrd
         clientEmail: projects.clientEmail,
         hourlyRateCents: projects.hourlyRateCents,
         hoursPerDay: projects.hoursPerDay,
+        clientLocale: projects.clientLocale,
       },
     })
     .from(changeOrders)

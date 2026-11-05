@@ -116,7 +116,7 @@ describe("작업 화면 조회", () => {
     const data = await getWorkspace(db, projectId);
 
     expect(Object.keys(data?.project ?? {}).sort()).toEqual(
-      ["agreedOn", "clientEmail", "clientName", "dueOn", "hourlyRateCents", "hoursPerDay", "id", "title"].sort(),
+      ["agreedOn", "clientEmail", "clientLocale", "clientName", "dueOn", "hourlyRateCents", "hoursPerDay", "id", "title"].sort(),
     );
     expect(data?.project).not.toHaveProperty("createdAt");
     expect(data?.project).not.toHaveProperty("lastSeenAt");

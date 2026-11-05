@@ -4,6 +4,7 @@ import { canTransition } from "@/domain/change-order";
 import { invoiceNumberFor, SENT_LIKE } from "@/domain/invoice";
 import { paymentDecision } from "@/domain/payment";
 import { extraDaysForHours, formatUsd, priceForHours, toPayPalValue } from "@/domain/money";
+import { invoiceTexts } from "@/i18n/invoice";
 import { actionErrorFor, errorDetail, failureSummary, recordFailure, type PayPalStep } from "./billing-errors";
 import { activityInsertAfterChange } from "./db/activity";
 import {
@@ -75,18 +76,23 @@ type BillingError = Extract<BillingActionResult, { ok: false }>["error"];
 const OK: BillingActionResult = { ok: true };
 const fail = (error: BillingError): BillingActionResult => ({ ok: false, error });
 
-const hoursFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
-
-// What PayPal shows the client. Everything comes from the database, never from the form.
+// What PayPal shows the client. Everything comes from the database, never from the form. The description and note are
+// written in the project's client language (i18n/invoice.ts); in English they are the same lines as before it existed.
+// The language is read when the invoice is created: an invoice PayPal already has keeps its words.
 function invoiceInputFor(order: BillingOrder): InvoiceInput {
   const { project } = order;
   const exactCents = (Math.round(order.hours * 100) * project.hourlyRateCents) / 100;
-  const rounded = order.amountCents > exactCents ? ", rounded up to the next $10" : "";
+  const { description, note } = invoiceTexts(project.clientLocale, {
+    projectTitle: project.title,
+    hours: order.hours,
+    hourlyRateCents: project.hourlyRateCents,
+    roundedUp: order.amountCents > exactCents,
+  });
   return {
     changeOrderId: order.id,
     title: order.title,
-    description: `Estimated ${hoursFormat.format(order.hours)} h at ${formatUsd(project.hourlyRateCents)}/h${rounded}`,
-    note: `Change order for ${project.title}. Not part of the agreed scope.`,
+    description,
+    note,
     amountCents: order.amountCents,
     recipient: { email: project.clientEmail, businessName: project.clientName },
   };

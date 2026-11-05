@@ -17,6 +17,7 @@ const projectColumns = {
   hoursPerDay: projects.hoursPerDay,
   agreedOn: projects.agreedOn,
   dueOn: projects.dueOn,
+  clientLocale: projects.clientLocale,
 };
 
 const findingColumns = {

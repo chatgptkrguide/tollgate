@@ -13,6 +13,7 @@ This document is the plan the code follows. When the code and this file disagree
 | Claude scope review, Claude call caps, activity panel on screen (phase 4) | Built on `phase/P4`; not deployed |
 | Per-copy limits and public demo polish (phase 5) | Per-copy send cap and webhook sender map hardening built on `wp/P5-limits`; rest planned |
 | Payment-locked delivery, minimal version without Bryntum: Delivery panel and `work_unlocked` activity step (phase 6) | Built on `wp/P6-lock`; not deployed |
+| Languages: screen language (cookie, Accept-Language), catalogs in five languages, client language on the PayPal invoice (§12) | Infrastructure and server side built on `wp/i18n`; components not switched over yet; not deployed |
 
 ## 1. Product in one paragraph
 
@@ -69,7 +70,7 @@ All money is stored as integer cents. Dates are ISO strings in UTC. Every projec
 
 | Entity | Key fields | Notes |
 |:--|:--|:--|
-| `Project` | id, client name, client email, title, hourly rate, hours per day, agreed on, due date | One per engagement |
+| `Project` | id, client name, client email, title, hourly rate, hours per day, agreed on, due date, client locale | One per engagement. `client_locale` (`en` `ko` `ja` `es` `pt`, default `en`) is the language the PayPal invoice is written in (§12) |
 | `ScopeItem` | id, project id, title, amount, position | The agreed scope, version 1 |
 | `Message` | id, project id, from (`client` \| `me`), author, sent at, body | Pasted text, stored as written |
 | `Finding` | id, message id, quote, quote start/end, title, estimated hours, reason | A phrase Claude marked; `quote` must be an exact substring of the body, and its offsets are stored so the screen never searches again |
@@ -78,7 +79,7 @@ All money is stored as integer cents. Dates are ISO strings in UTC. Every projec
 | `WebhookEvent` | PayPal event id (unique), type, invoice id, outcome, event created at, received at, processed at | Makes webhook handling idempotent. Recorded in the same `db.batch()` as the order change; a second row with the same id rolls the batch back |
 | `PayPalSend` | id, change order id, at | One row per PayPal send the server allowed, for the server-wide cap. No foreign key, so a demo reset or cleanup never lowers the count; rows older than a day are pruned |
 
-The database repeats the core rules as CHECK constraints (known status, no negative amounts, `sent` needs an invoice id, billed orders need an amount above zero, `paid` needs its dates in order), so a write that skips the domain code still can't store a broken order.
+The database repeats the core rules as CHECK constraints (known status, known client locale, no negative amounts, `sent` needs an invoice id, billed orders need an amount above zero, `paid` needs its dates in order), so a write that skips the domain code still can't store a broken order.
 
 ### Change order status
 
@@ -142,6 +143,7 @@ src/
     api/webhooks/paypal/    PayPal webhook route handler
     api/health/             health check (DB + PayPal token); live/ is the DB-only check Render polls
   components/               UI (client components only where state is needed)
+  i18n/                     languages: locales, catalogs (messages/), t(), formatting, getLocale, setLocale, LocaleSwitcher
   domain/                   types, status rules, money math (no I/O)
   server/
     env.ts                  zod-validated environment
@@ -181,6 +183,7 @@ docs/                       this file
 - **Sandbox, by hand:** send a change order, pay it as the sandbox buyer, watch the webhook arrive. Locally the webhook needs a tunnel; the deployed app receives it directly. PayPal can resend a delivered event by id, which checks duplicates on the live app. Events from PayPal's webhook simulator can't pass signature verification, so the simulator only shows the route is reachable.
 - **Sandbox (`pnpm accept:sandbox`):** runs against the real PayPal sandbox with the keys in `.env.local`, outside `pnpm check`; it sends twice at once and counts the invoices for that change order with the search API, then cancels what it sent.
 - **Browser (Playwright, `pnpm e2e`):** one production build, the installed Chrome, and fresh throwaway databases; phase 1 tests run on a server without PayPal keys, PayPal tests on one with them; each server starts on an empty database path and migrates before its first request; two browser contexts get separate copies, state survives reload, reset asks for a confirmation and restores the seed, a forged id from another copy is refused, and the Delivery panel shows the seed (gift card unlocked and counted, loyalty page locked) and moves the launch when the loyalty page is included at no charge; the demo guide points to the marked request when Claude is off and starts folded once the copy has activity, a press on the disabled Check scope states the reason, and the totals read "Total with changes" and the unpaid amount, STOP until everything is settled; each ticket shows its number and status in words, and a payment that arrives while the tab is open lifts the ticket's barrier once (never under reduced motion, where the paid state simply shows).
+- **Languages (unit):** every catalog has every English key with the same `{params}` and `<tags>`, nothing empty or copied from English, product names kept; `t()` filling and English fallback; plural forms per locale; the order cookie > Accept-Language > English with an invalid cookie ignored; `setLocale` and `setClientLocale` refusing unknown values and other copies; invoice texts per locale, with the English lines byte for byte as before; migration 0007 keeping every row with foreign keys on.
 - Every commit passes `pnpm check` (lint, typecheck, test) and `pnpm build`.
 
 ## 10. Deployment
@@ -198,8 +201,22 @@ Render web service on the free plan, with the database on Turso's free plan (rem
 | Invoice number derived from the change order id is the idempotency key for PayPal, plus a send claim in the database | Invoicing ignores `PayPal-Request-Id` in the sandbox; PayPal enforces unique invoice numbers atomically | PayPal starts honoring the request id for invoices |
 | Direct REST client for invoices, not the Agent Toolkit | Sending money-related documents must be deterministic and testable; the toolkit fits an assistant better than a button | We add a chat assistant (not planned for the hackathon) |
 | Per-visitor demo copies instead of accounts | Judges can send and pay a real sandbox invoice without signing up, and can't touch each other's data | Abuse or Claude cost gets out of hand |
+| Own small typed catalogs instead of an i18n library | Five locales and about 130 strings; `as const` English plus `satisfies` catches a missing key at compile time with no new dependency | Plural or gender rules outgrow `_one`/`_other`, or translators need a TMS format |
+| Client language stored per project, screen language per visitor | The client reads the invoice; the freelancer reads the screen. They are often different people in different countries | Accounts arrive and a freelancer has several clients |
 | Render free plan + Turso, not a paid plan with a disk | No card on file (sponsor decision, Nov 4); the database outlives restarts on Turso | Cold starts hurt the demo: move to the paid plan with a disk |
 | Claude for review, JSON schema output | Needs reasoning over two texts and an exact quote back | Cost or latency is a problem |
 | SQLite through libSQL + Drizzle | Zero setup for judges running locally, one file to back up | We need concurrent writers |
 | Hours from the model, price from the rate | Keeps prices explainable and stops the model inventing numbers | — |
 | English UI | Judges and the target clients are international | — |
+
+## 12. Languages
+
+Two languages are kept apart. The **screen language** is the visitor's: what the interface is written in. The **client language** belongs to the project: what the PayPal invoice the client receives is written in. Neither calls a model or costs anything; every text is written in advance.
+
+**Locales.** `en` (default), `ko`, `ja`, `es`, `pt` (Brazilian Portuguese), in `src/i18n/locales.ts`. Numbers and dates use `en-US`, `ko-KR`, `ja-JP`, `es-ES` and `pt-BR`. Money is always USD; only how it is written changes (`$650`, `US$650`, `650 US$`). Dates stay in UTC so the server and the browser print the same day.
+
+**Choosing the screen language.** Each request takes the `tg_locale` cookie if it names one of the five, otherwise the best match in `Accept-Language` (primary subtag only, by q, `q=0` excluded), otherwise English (`getLocale()` in `src/i18n/server.ts`). The `setLocale(locale)` server action checks the value and sets the cookie for a year, `SameSite=Lax`, path `/`, `Secure` in production; it isn't HttpOnly because it says nothing secret. `LocaleSwitcher` (a native `<select>`, each language written in itself) calls it and then `router.refresh()`. The root layout stays a static shell under Cache Components, so `<html lang>` ships as `en` and a small component rendered in a `<Suspense>` in the layout sets it to the request's language as soon as it streams in.
+
+**Catalogs.** `src/i18n/messages/en.ts` is the source of keys (`group.key`, grouped by component); `ko`, `ja`, `es` and `pt` must have the same keys (`satisfies Catalog`) and the same `{params}` and `<b>`/`<link>`/`<nowrap>` marks (unit test). `t(locale, key, params)` fills `{name}` and falls back to English; its params are typed from the English text. `tCount` picks `_one`/`_other` with `Intl.PluralRules`; `tRich` splits the marks into parts for the component to style. Product names are never translated. Data is never translated: the seeded conversation, client and project names, scope and change order titles, Claude's reasons, the sample client message, and activity summaries stay as written. Wiring the components is the remaining step (`src/i18n/README.md`).
+
+**The invoice.** `projects.client_locale` (migration 0007, a hand-written `ALTER TABLE … ADD` with a column CHECK, because drizzle-kit's table rebuild would have dropped `projects` and cascaded to every copy's rows) is read with the order when the invoice is created. `server/billing.ts` writes the item description and the note from the catalog's `invoice` group in that language (`src/i18n/invoice.ts`); the item name (the change order's title), the amount, the currency, the invoice number and the reference are the same in every language. In English the lines are byte for byte what was sent before, so the recorded sandbox responses still match. `setClientLocale(projectId, locale)` changes it, with the same checks as reset: a demo copy id, a known locale, and the visitor's own copy (another copy answers `not_found`). An invoice PayPal already has keeps its words; a reset puts the copy back on English.
