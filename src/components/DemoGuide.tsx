@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { Rich } from "@/components/Rich";
+import type { Locale } from "@/i18n/locales";
+import { t, tRich } from "@/i18n/t";
 
 // The change order a visitor can act on right away: the first draft or sent one, and the message that asked for it.
 export interface GuideTarget {
@@ -14,6 +17,7 @@ interface DemoGuideProps {
   reviewBlockedReason: string | null; // set when this server can't call Claude, so step 1 can't be tried here
   target: GuideTarget | null;
   defaultOpen: boolean; // open on a fresh copy; folded once the copy has activity
+  locale: Locale;
 }
 
 interface StepProps {
@@ -27,65 +31,53 @@ const LINK = "font-semibold underline decoration-stop decoration-2 underline-off
 // to try, and that the copy is theirs. A <details> element, so it folds without extra code and stays reachable by
 // keyboard. It opens on a fresh copy and starts folded once the copy has activity (the visitor has been here). The
 // first value is kept, so a refresh after an action never folds it under the visitor's hands.
-export function DemoGuide({ client, reviewBlockedReason, target, defaultOpen }: DemoGuideProps) {
+export function DemoGuide({ client, reviewBlockedReason, target, defaultOpen, locale }: DemoGuideProps) {
   const [open] = useState(defaultOpen);
+  const markedLink = (text: string) =>
+    target && (
+      <a href={target.href} className={LINK}>
+        {text}
+      </a>
+    );
 
   return (
     <details open={open} className="group border-b border-line bg-canvas" data-testid="demo-guide">
       <summary className="mx-auto flex min-h-11 max-w-[1280px] cursor-pointer list-none items-baseline justify-between gap-4 px-4 py-3 text-[14px] sm:px-8 [&::-webkit-details-marker]:hidden">
         <span>
-          <span className="font-display font-bold">How this demo works.</span>{" "}
-          <span className="text-ink-2">
-            Tollgate finds the extra work hiding in a client&apos;s message and bills it through PayPal before you build it.
-          </span>
+          <span className="font-display font-bold">{t(locale, "guide.summaryTitle")}</span>{" "}
+          <span className="text-ink-2">{t(locale, "guide.summaryText")}</span>
         </span>
         <span className="shrink-0 font-display font-bold text-ink-2 underline decoration-line decoration-2 underline-offset-4 group-hover:decoration-ink-2">
-          <span className="group-open:hidden">Show</span>
-          <span className="hidden group-open:inline">Hide</span>
+          <span className="group-open:hidden">{t(locale, "guide.show")}</span>
+          <span className="hidden group-open:inline">{t(locale, "guide.hide")}</span>
         </span>
       </summary>
       <div className="mx-auto max-w-[1280px] px-4 pb-4 sm:px-8">
         <ol className="grid gap-x-8 gap-y-3 text-[14px] sm:grid-cols-3">
           <Step n={1}>
             {reviewBlockedReason === null ? (
-              <>
-                Paste a new message from {client}, or press <b>Use a sample message</b>, then <b>Check scope</b>.
-              </>
+              <Rich parts={tRich(locale, "guide.step1Live", { client })} />
             ) : target ? (
-              <>
-                Live Claude checks are off on this public demo. {target.author}&apos;s {target.sentOn} message already has a{" "}
-                <a href={target.href} className={LINK}>
-                  marked request
-                </a>{" "}
-                — start at step 3.
-              </>
+              <Rich parts={tRich(locale, "guide.step1Target", { author: target.author, sentOn: target.sentOn })} link={markedLink} />
             ) : (
-              <>
-                Live Claude checks are off on this public demo. The requests already marked in {client}&apos;s messages
-                show what a check finds; <b>Reset demo</b> brings back one to send.
-              </>
+              <Rich parts={tRich(locale, "guide.step1NoTarget", { client })} />
             )}
           </Step>
-          <Step n={2}>
-            Claude marks what the agreed scope doesn&apos;t cover and estimates the hours. The price is your hourly rate
-            times those hours. Nothing is sent yet.
-          </Step>
+          <Step n={2}>{t(locale, "guide.step2")}</Step>
           <Step n={3}>
-            Press <b>Send change order</b> to send a PayPal sandbox invoice. When the client pays it, the work unlocks,
-            the launch moves, and the total turns green.
+            <Rich parts={tRich(locale, "guide.step3")} />
             {target && (
               <>
                 {" "}
                 <a href={target.href} className={`whitespace-nowrap ${LINK}`}>
-                  Go to the change order
+                  {t(locale, "guide.goToOrder")}
                 </a>
               </>
             )}
           </Step>
         </ol>
         <p className="mt-3 text-[13px] text-ink-2">
-          This copy is yours alone; <b className="font-semibold">Reset demo</b> puts it back. PayPal runs in sandbox mode,
-          so no real money moves.
+          <Rich parts={tRich(locale, "guide.footer")} boldClassName="font-semibold" />
         </p>
       </div>
     </details>

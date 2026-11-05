@@ -6,6 +6,8 @@ import { cancelChangeOrder, checkPayment, requoteChangeOrder, sendChangeOrder, w
 import type { ActionError, ActionResult, BillingActionResult, PayPalActionError } from "@/domain/action-result";
 import { SEND_LIMITS_PER_COPY } from "@/domain/send-limit";
 import type { ChangeOrder } from "@/domain/types";
+import type { Locale } from "@/i18n/locales";
+import { t } from "@/i18n/t";
 
 export interface ActionsOrder extends Pick<ChangeOrder, "id" | "status" | "payerViewUrl"> {
   hasInvoice: boolean; // PayPal already has an invoice for it (never the id itself: that stays on the server)
@@ -15,41 +17,28 @@ export interface ChangeOrderActionsProps {
   order: ActionsOrder;
   sendBlockedReason: string | null; // why PayPal actions are off (no keys on this server); null when they work
   statusLineId: string; // the note's status line (role="status", tabIndex -1), focused after an action succeeds
+  locale: Locale;
 }
 
 const COPY_SEND_MAX = SEND_LIMITS_PER_COPY[0].max;
 
-const errorText: Record<ActionError | PayPalActionError, string> = {
-  invalid_input: "This change order isn't in your demo copy. Reload the page.",
-  not_found: "This change order isn't in your demo copy. Reload the page.",
-  invalid_state: "This change order was already updated. Reload to see it.",
-  server_error: "This couldn't be saved just now. Nothing changed; try again.",
-  in_progress: "This invoice is already being sent. Wait a moment, then reload.",
-  paypal_unavailable: "PayPal didn't respond. Try again; the client won't get a second invoice.",
-  paypal_rejected: "PayPal refused this request, so nothing was sent.",
-  already_paid: "The client already paid this invoice, so it can't be cancelled.",
-  not_configured: "PayPal isn't set up on this server, so nothing was sent.",
-  invoice_exists: "PayPal already has an invoice for this, so it can't be included at no charge. Send it again; you can cancel it afterwards.",
-  paypal_unconfirmed: "PayPal may have sent it, but this page couldn't confirm it. Press Send again to check; the client won't get a second invoice.",
-  invoice_void: "PayPal can't use this invoice any more, so it's marked cancelled here. Quote it again to send a new one.",
-  rate_limited: "The demo server has sent as many PayPal invoices as it may for now, across all visitors, so nothing was sent. Try again later.",
-  copy_rate_limited: `Your demo copy has used its ${COPY_SEND_MAX} PayPal sends for the last 24 hours, so nothing was sent; resetting it doesn't change that.`,
-  not_paid_yet: "PayPal doesn't show this invoice as fully paid yet. Check again after the client pays.",
-  invoice_changed: "PayPal shows a different amount for this invoice, so it wasn't marked paid. Check it in PayPal.",
-};
+// Error codes the cancel and check buttons explain in their own words; every other code reads as changeOrderErrors.
+const CANCEL_ERRORS = ["paypal_unavailable", "paypal_rejected", "paypal_unconfirmed", "not_configured"] as const;
+const CHECK_ERRORS = ["paypal_unavailable", "paypal_rejected", "not_configured"] as const;
+type ErrorGroup = "changeOrderErrors" | "cancelErrors" | "checkErrors";
 
-const cancelErrorText: Partial<Record<ActionError | PayPalActionError, string>> = {
-  paypal_unavailable: "PayPal didn't respond, so the invoice may still be open. Try again.",
-  paypal_rejected: "PayPal refused to cancel it, so the invoice is still open.",
-  paypal_unconfirmed: "PayPal cancelled the invoice, but this page couldn't save that. Cancel it again to bring the page up to date.",
-  not_configured: "PayPal isn't set up on this server, so the invoice wasn't cancelled.",
-};
-
-const checkErrorText: Partial<Record<ActionError | PayPalActionError, string>> = {
-  paypal_unavailable: "PayPal didn't respond, so the payment couldn't be checked. Try again.",
-  paypal_rejected: "PayPal refused to show this invoice, so the payment couldn't be checked.",
-  not_configured: "PayPal isn't set up on this server, so the payment couldn't be checked.",
-};
+function errorMessage(locale: Locale, group: ErrorGroup, code: ActionError | PayPalActionError): string {
+  const max = { max: COPY_SEND_MAX };
+  if (group === "cancelErrors") {
+    const own = CANCEL_ERRORS.find((c) => c === code);
+    if (own) return t(locale, `cancelErrors.${own}`);
+  }
+  if (group === "checkErrors") {
+    const own = CHECK_ERRORS.find((c) => c === code);
+    if (own) return t(locale, `checkErrors.${own}`);
+  }
+  return t(locale, `changeOrderErrors.${code}`, max);
+}
 
 // Classes in globals.css: a 1px press, hover shades, and palette colours when aria-disabled (no colour change then).
 const PRIMARY = "btn btn-primary";
@@ -71,7 +60,7 @@ function useFocusOnSuccess(state: ActionResult | BillingActionResult | null, sta
 // The buttons under a change order: send or include at no charge (draft), send again (a draft PayPal already has an
 // invoice for), the client's PayPal page, check payment and cancel (sent), quote again (cancelled). The browser sends
 // only the order id; the server decides the rest.
-export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: ChangeOrderActionsProps) {
+export function ChangeOrderActions({ order, sendBlockedReason, statusLineId, locale }: ChangeOrderActionsProps) {
   // Every hook stays here, whatever the status, so the component stays mounted through the refresh after an
   // action and can move focus once the new status arrives.
   const [waiveState, waiveAction, waiving] = useActionState(waiveChangeOrder, null);
@@ -131,16 +120,16 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
   );
   // Each action keeps its last answer until it runs again; a success changes the status, which hides the panel.
   // "Not paid yet" is an answer, not a failure: it reads as a calm status line, not an alert.
-  const errorFor = (state: ActionResult | BillingActionResult | null, texts: Partial<Record<ActionError | PayPalActionError, string>> = {}) =>
+  const errorFor = (state: ActionResult | BillingActionResult | null, group: ErrorGroup = "changeOrderErrors") =>
     state &&
     !state.ok &&
     (state.error === "not_paid_yet" ? (
       <p role="status" className="mt-3 text-[14px] leading-relaxed text-ink-2">
-        {errorText.not_paid_yet}
+        {t(locale, "changeOrderErrors.not_paid_yet")}
       </p>
     ) : (
       <p role="alert" className="mt-3 border-l-2 border-stop pl-3 text-[14px] leading-relaxed font-semibold text-ink">
-        {texts[state.error] ?? errorText[state.error]}
+        {errorMessage(locale, group, state.error)}
       </p>
     ));
 
@@ -164,7 +153,7 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
               onClick={submitOnce(blocked || sending)}
               className={`${PRIMARY} ${blocked ? "aria-disabled:cursor-not-allowed" : "aria-disabled:cursor-wait"}`}
             >
-              {sending ? "Sending…" : resend ? "Send again" : "Send change order"}
+              {sending ? t(locale, "changeOrder.sending") : resend ? t(locale, "changeOrder.sendAgain") : t(locale, "changeOrder.send")}
               {sending && <Busy />}
             </button>
           </form>
@@ -182,7 +171,7 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
                     aria-describedby={confirmId}
                     className={SECONDARY}
                   >
-                    Keep the charge
+                    {t(locale, "changeOrder.keepCharge")}
                   </button>
                   {/* aria-disabled while saving, not disabled: a disabled button drops the focus it holds. */}
                   <button
@@ -193,12 +182,12 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
                     onClick={submitOnce(waiving)}
                     className={`${PRIMARY} aria-disabled:cursor-wait`}
                   >
-                    Confirm: include at no charge
+                    {t(locale, "changeOrder.confirmWaive")}
                   </button>
                 </>
               ) : (
                 <button key="include" ref={includeRef} type="button" onClick={() => openConfirm("waive", keepRef)} className={SECONDARY}>
-                  Include at no charge
+                  {t(locale, "changeOrder.includeFree")}
                 </button>
               )}
             </form>
@@ -206,12 +195,12 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
         </div>
         {resend && (
           <p id={resendId} className="mt-3 text-[14px] leading-relaxed">
-            PayPal already has this invoice from an earlier try, and the client may have it. Send it again to finish; you can cancel it afterwards.
+            {t(locale, "changeOrder.resendHelp")}
           </p>
         )}
         {confirmingWaive && (
           <p id={confirmId} className="mt-3 text-[14px] leading-relaxed">
-            The client won&apos;t be billed for this, and it can&apos;t be undone.
+            {t(locale, "changeOrder.waiveConfirmHelp")}
           </p>
         )}
         {reason}
@@ -233,17 +222,16 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
             rel="noopener noreferrer"
             className="btn btn-primary w-full sm:w-auto"
           >
-            Open the client&apos;s PayPal page
+            {t(locale, "changeOrder.openPayerPage")}
             <svg aria-hidden="true" viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" className="-mt-0.5">
               <path d="M4.5 2.5h5v5M9.5 2.5 3 9" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <span className="sr-only"> (opens in a new tab)</span>
+            <span className="sr-only"> {t(locale, "changeOrder.opensNewTab")}</span>
           </a>
         )}
         {order.payerViewUrl && (
           <p className="mt-2 text-[14px] leading-relaxed text-ink-2">
-            Pay it as the client with the sandbox buyer account from the Devpost testing notes. This page turns green
-            when PayPal confirms.
+            {t(locale, "changeOrder.payAsClient")}
           </p>
         )}
         {/* When the webhook is late: reads the invoice from PayPal and marks it paid if PayPal says so. */}
@@ -257,7 +245,7 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
               onClick={submitOnce(blocked || checking)}
               className={`${SECONDARY} ${blocked ? "aria-disabled:cursor-not-allowed" : "aria-disabled:cursor-wait"}`}
             >
-              {checking ? "Checking…" : "Check payment"}
+              {checking ? t(locale, "changeOrder.checking") : t(locale, "changeOrder.checkPayment")}
               {checking && <Busy />}
             </button>
           </form>
@@ -274,7 +262,7 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
                   aria-describedby={cancelConfirmId}
                   className={SECONDARY}
                 >
-                  Keep the invoice
+                  {t(locale, "changeOrder.keepInvoice")}
                 </button>
                 <button
                   key="confirm-cancel"
@@ -284,7 +272,7 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
                   onClick={submitOnce(cancelling)}
                   className={`${PRIMARY} aria-disabled:cursor-wait`}
                 >
-                  {cancelling ? "Cancelling…" : "Confirm: cancel the invoice"}
+                  {cancelling ? t(locale, "changeOrder.cancelling") : t(locale, "changeOrder.confirmCancel")}
                   {cancelling && <Busy />}
                 </button>
               </>
@@ -298,19 +286,19 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
                 onClick={blocked ? undefined : () => openConfirm("cancel", keepInvoiceRef)}
                 className={`${SECONDARY} aria-disabled:cursor-not-allowed`}
               >
-                Cancel invoice
+                {t(locale, "changeOrder.cancelInvoice")}
               </button>
             )}
           </form>
         </div>
         {confirmingCancel && (
           <p id={cancelConfirmId} className="mt-3 text-[14px] leading-relaxed">
-            PayPal will cancel the invoice and the client can no longer pay it. You can quote this again afterwards.
+            {t(locale, "changeOrder.cancelConfirmHelp")}
           </p>
         )}
         {reason}
-        {errorFor(checkState, checkErrorText)}
-        {errorFor(cancelState, cancelErrorText)}
+        {errorFor(checkState, "checkErrors")}
+        {errorFor(cancelState, "cancelErrors")}
       </div>
     );
   }
@@ -321,7 +309,7 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
         <form action={requoteAction} data-action="requote">
           <input type="hidden" name="changeOrderId" value={order.id} />
           <button type="submit" aria-disabled={requoting || undefined} onClick={submitOnce(requoting)} className={SECONDARY}>
-            {requoting ? "Quoting…" : "Quote again"}
+            {requoting ? t(locale, "changeOrder.quoting") : t(locale, "changeOrder.quoteAgain")}
             {requoting && <Busy />}
           </button>
         </form>

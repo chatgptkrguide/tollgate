@@ -2,6 +2,9 @@ import { connection } from "next/server";
 import { Suspense, type ReactElement } from "react";
 import { Workspace } from "@/components/Workspace";
 import { WorkspaceSkeleton } from "@/components/WorkspaceSkeleton";
+import type { Locale } from "@/i18n/locales";
+import { getLocale } from "@/i18n/server";
+import { t } from "@/i18n/t";
 import { listActivity } from "@/server/db/activity";
 import { getDb } from "@/server/db/client";
 import { openVisitorWorkspace } from "@/server/db/queries";
@@ -9,22 +12,36 @@ import { env } from "@/server/env";
 import { paypalConfig } from "@/server/paypal/token";
 import { readVisitorId } from "@/server/session";
 
-// Without sandbox keys (a judge running it locally, the phase 1 browser tests) sending stays off and says why.
-const SEND_BLOCKED_REASON = "PayPal sandbox keys aren't set on this server, so nothing can be sent.";
-const REVIEW_BLOCKED_REASON = "Claude isn't set up on this server, so messages can't be checked.";
+interface MissingVisitorNoticeProps {
+  locale: Locale;
+}
 
+// The loading screen is the Suspense fallback, so it can't wait for data; it reads only the language (a cookie or a
+// header, no database) inside its own small Suspense, and the static shell shows it in English until then.
 export default function Home() {
   return (
-    <Suspense fallback={<WorkspaceSkeleton />}>
+    <Suspense
+      fallback={
+        <Suspense fallback={<WorkspaceSkeleton />}>
+          <LocalizedSkeleton />
+        </Suspense>
+      }
+    >
       <VisitorWorkspace />
     </Suspense>
   );
 }
 
+async function LocalizedSkeleton(): Promise<ReactElement> {
+  const locale = await getLocale();
+  return <WorkspaceSkeleton loading={t(locale, "skeleton.loading")} />;
+}
+
 // Reads the visitor cookie, creates the visitor's own copy on the first visit, then renders it from the database.
+// Without sandbox keys (a judge running it locally, the phase 1 browser tests) sending stays off and says why.
 async function VisitorWorkspace(): Promise<ReactElement> {
-  const visitorId = await readVisitorId();
-  if (!visitorId) return <MissingVisitorNotice />;
+  const [visitorId, locale] = await Promise.all([readVisitorId(), getLocale()]);
+  if (!visitorId) return <MissingVisitorNotice locale={locale} />;
   // Cookies alone still allow a prerender (Partial Prefetching builds a per-session shell with them).
   // Everything below needs a real request: the clock, random ids, and the copy's database writes.
   await connection();
@@ -36,17 +53,18 @@ async function VisitorWorkspace(): Promise<ReactElement> {
     <Workspace
       data={data}
       activity={activity}
-      sendBlockedReason={paypalConfig() ? null : SEND_BLOCKED_REASON}
-      reviewBlockedReason={env().ANTHROPIC_API_KEY ? null : REVIEW_BLOCKED_REASON}
+      sendBlockedReason={paypalConfig() ? null : t(locale, "page.sendBlocked")}
+      reviewBlockedReason={env().ANTHROPIC_API_KEY ? null : t(locale, "page.reviewBlocked")}
+      locale={locale}
     />
   );
 }
 
 // Only when the request skipped proxy.ts, so it has no visitor cookie yet.
-function MissingVisitorNotice() {
+function MissingVisitorNotice({ locale }: MissingVisitorNoticeProps) {
   return (
     <main className="mx-auto max-w-[1280px] px-4 py-10 sm:px-8">
-      <p className="font-display text-[22px] font-bold">Reload the page to start your demo.</p>
+      <p className="font-display text-[22px] font-bold">{t(locale, "page.missingVisitor")}</p>
     </main>
   );
 }

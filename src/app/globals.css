@@ -46,6 +46,16 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Line breaks that read right in each script: Korean breaks between words, not inside them; Japanese breaks between
+   phrases where the browser can tell (Chrome), elsewhere anywhere as usual. A word too long for its box still breaks. */
+html:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+html:lang(ja) {
+  word-break: auto-phrase;
+}
+
 ::selection {
   background: var(--color-stop-wash);
   color: var(--color-ink);
@@ -126,6 +136,42 @@ body {
 @keyframes btn-progress {
   from { transform: translateX(-100%); }
   to { transform: translateX(250%); }
+}
+
+/* ---------- Selects (screen language, client language) ---------- */
+
+/* Native <select>s dressed like the buttons: Overpass, 44 px tall, a chevron, 16 px text so iOS doesn't zoom. In the
+   components layer so a utility (pl-9 for the globe) can adjust the padding. */
+@layer components {
+  .select {
+    appearance: none;
+    min-height: 44px;
+    max-width: 100%;
+    border: 1px solid var(--color-field);
+    border-radius: 8px;
+    background: var(--color-surface)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2312161f' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      no-repeat right 12px center / 12px 12px;
+    padding: 2px 36px 0 12px;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--color-ink);
+    cursor: pointer;
+    transition: border-color 120ms ease-out, background-color 120ms ease-out;
+  }
+  .select:hover {
+    border-color: var(--color-ink);
+  }
+  .select[aria-busy="true"] {
+    color: var(--color-ink-2);
+    cursor: progress;
+  }
+  /* In the app bar: a quieter border that firms up on hover, like the Reset demo text button beside it */
+  .select-quiet {
+    border-color: var(--color-line);
+  }
 }
 
 /* ---------- Status lamp ---------- */

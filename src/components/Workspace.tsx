@@ -1,5 +1,6 @@
 import { ActivityPanel } from "@/components/ActivityPanel";
 import { BarrierGlyph } from "@/components/BarrierGlyph";
+import { ClientLocaleSelect } from "@/components/ClientLocaleSelect";
 import { Conversation } from "@/components/Conversation";
 import { CountingAmount } from "@/components/CountingAmount";
 import { DeliveryPanel } from "@/components/DeliveryPanel";
@@ -14,16 +15,19 @@ import { ScopePanel } from "@/components/ScopePanel";
 import { Ticket } from "@/components/Ticket";
 import type { ActivityEvent } from "@/domain/activity";
 import { isUnpaid } from "@/domain/change-order";
-import { formatShortDate } from "@/domain/dates";
-import { formatUsd } from "@/domain/money";
 import type { ChangeOrder, Finding } from "@/domain/types";
 import type { WorkspaceData } from "@/domain/workspace";
+import { formatDate, formatMoney } from "@/i18n/format";
+import type { Locale } from "@/i18n/locales";
+import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
+import { t, tCount } from "@/i18n/t";
 
 export interface WorkspaceProps {
   data: WorkspaceData;
   activity: readonly ActivityEvent[]; // oldest first
   sendBlockedReason: string | null; // set when this server has no PayPal keys, so sending and cancelling are off
   reviewBlockedReason: string | null; // set when this server has no Claude key, so checking a message is off
+  locale: Locale; // the screen language of this request (getLocale())
 }
 
 interface TicketEntry {
@@ -36,20 +40,22 @@ interface TicketEntry {
 interface ProjectHeaderProps {
   data: WorkspaceData;
   client: string;
+  locale: Locale;
 }
 
 interface TicketsColumnProps {
   entries: readonly TicketEntry[];
   sendBlockedReason: string | null;
+  locale: Locale;
   className?: string;
 }
 
 // The first change order the visitor can act on (draft or sent) and the message that asked for it, for the guide.
-function guideTarget(data: WorkspaceData): GuideTarget | null {
+function guideTarget(data: WorkspaceData, locale: Locale): GuideTarget | null {
   const order = data.changeOrders.find(isUnpaid);
   const message = order && data.messages.find((m) => m.findings.some((f) => f.order?.id === order.id));
   if (!order || !message) return null;
-  return { href: `#${noteId(order)}`, author: message.author.split(" ")[0], sentOn: formatShortDate(message.sentAt) };
+  return { href: `#${noteId(order)}`, author: message.author.split(" ")[0], sentOn: formatDate(locale, message.sentAt) };
 }
 
 // One ticket per marked phrase, showing its live order (or the cancelled one, until it's quoted again). Newest message
@@ -77,7 +83,7 @@ function seenSnapshot(data: WorkspaceData, activity: readonly ActivityEvent[]): 
 
 // The whole screen is rendered on the server from the database; only the action forms and the small motion helpers
 // run in the browser.
-export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReason }: WorkspaceProps) {
+export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReason, locale }: WorkspaceProps) {
   const { project } = data;
   const client = data.messages.find((m) => m.from === "client")?.author ?? project.clientName;
   const awaitingPayment = data.changeOrders.some((o) => o.status === "sent");
@@ -89,7 +95,7 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
       <LinkHighlighter />
 
       <div className="sticky top-0 z-30 border-b border-line bg-surface">
-        <div className="mx-auto flex min-h-16 max-w-[1280px] items-center gap-4 px-4 py-2 sm:px-8">
+        <div className="mx-auto flex min-h-16 max-w-[1280px] items-center gap-3 px-4 py-2 sm:gap-4 sm:px-8">
           <p className="flex items-center gap-2 pt-0.5 font-display text-[20px] font-extrabold tracking-[-0.01em]">
             <BarrierGlyph size={28} />
             Tollgate
@@ -100,65 +106,84 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
             <span className="mx-2">/</span>
             {project.title}
           </p>
-          <div className="ml-auto flex items-center gap-2">
-            {/* Reserved for the language switcher. */}
-            <div id="locale-slot" />
-            <ResetDemo projectId={project.id} />
+          <div className="ml-auto flex items-center gap-1 sm:gap-4">
+            <div id="locale-slot">
+              <LocaleSwitcher locale={locale} label={t(locale, "localeSwitcher.label")} />
+            </div>
+            <ResetDemo projectId={project.id} locale={locale} />
           </div>
         </div>
       </div>
 
-      <DemoGuide client={client} reviewBlockedReason={reviewBlockedReason} target={guideTarget(data)} defaultOpen={activity.length === 0} />
-      <ProjectHeader data={data} client={client} />
+      <DemoGuide
+        client={client}
+        reviewBlockedReason={reviewBlockedReason}
+        target={guideTarget(data, locale)}
+        defaultOpen={activity.length === 0}
+        locale={locale}
+      />
+      <ProjectHeader data={data} client={client} locale={locale} />
 
       {/* Tickets come first in the page, so on a phone they sit right under the total; on a wide screen they head the
           right column and the conversation spans both rows on the left. */}
       <main className="mx-auto grid max-w-[1280px] gap-6 px-4 pt-6 pb-16 sm:px-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-8">
-        <TicketsColumn entries={ticketEntries(data)} sendBlockedReason={sendBlockedReason} className="lg:col-start-2 lg:row-start-1" />
+        <TicketsColumn entries={ticketEntries(data)} sendBlockedReason={sendBlockedReason} locale={locale} className="lg:col-start-2 lg:row-start-1" />
         <Conversation
           messages={data.messages}
           clientName={project.clientName}
           client={client}
           reviewBlockedReason={reviewBlockedReason}
+          locale={locale}
           className="lg:col-start-1 lg:row-span-2 lg:row-start-1"
         />
         <div className="space-y-6 lg:col-start-2 lg:row-start-2">
-          <DeliveryPanel plan={data.delivery} />
-          <ScopePanel data={data} />
-          <ActivityPanel activity={activity} />
+          <DeliveryPanel plan={data.delivery} locale={locale} />
+          <ScopePanel data={data} locale={locale} />
+          <ActivityPanel activity={activity} locale={locale} />
         </div>
       </main>
     </div>
   );
 }
 
-function ProjectHeader({ data, client }: ProjectHeaderProps) {
+function ProjectHeader({ data, client, locale }: ProjectHeaderProps) {
   const { project, totals } = data;
   const tone = totals.hasUnpaid ? "stop" : "go";
 
   return (
     <header className="border-b border-line bg-surface">
       <div className="mx-auto flex max-w-[1280px] flex-wrap items-end justify-between gap-x-10 gap-y-5 px-4 py-6 sm:px-8">
-        <div>
+        <div className="min-w-0">
           <h1 className="font-display text-[30px] leading-tight font-extrabold tracking-[-0.015em]">{project.clientName}</h1>
           <p className="mt-1 text-ink-2">
-            {project.title} · {client} · agreed {formatShortDate(project.agreedOn)}
+            {project.title} · {client} · {t(locale, "workspace.agreedOn", { date: formatDate(locale, project.agreedOn) })}
           </p>
+          <div className="mt-4">
+            <ClientLocaleSelect
+              projectId={project.id}
+              clientLocale={project.clientLocale}
+              label={t(locale, "clientLocale.label")}
+              help={t(locale, "clientLocale.help")}
+              saveFailed={t(locale, "clientLocale.saveFailed")}
+            />
+          </div>
         </div>
         <dl className="flex flex-wrap items-end gap-x-8 gap-y-3">
           <div>
-            <dt className="font-display text-[13px] font-bold text-ink-2">Agreed</dt>
-            <dd className="mt-1.5 font-display text-[24px] leading-none font-bold text-ink-2 tabular-nums">{formatUsd(totals.agreedCents)}</dd>
+            <dt className="font-display text-[13px] font-bold text-ink-2">{t(locale, "workspace.agreed")}</dt>
+            <dd className="mt-1.5 font-display text-[24px] leading-none font-bold text-ink-2 tabular-nums">{formatMoney(locale, totals.agreedCents)}</dd>
           </div>
           <div data-testid="header-total" data-fx-total="" data-tone={tone}>
-            <dt className="font-display text-[13px] font-bold text-ink-2">Total with changes</dt>
+            <dt className="font-display text-[13px] font-bold text-ink-2">{t(locale, "workspace.totalWithChanges")}</dt>
             <dd className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
               <span className={`total-figure pt-1 font-display text-[44px] leading-none font-extrabold tracking-[-0.02em] tabular-nums ${totals.hasUnpaid ? "text-stop" : "text-go"}`}>
-                <CountingAmount cents={totals.totalCents} />
+                <CountingAmount cents={totals.totalCents} locale={locale} />
               </span>
               <span className="chip">
                 <span className="lamp" aria-hidden="true" />
-                {totals.unpaidCents > 0 ? `${formatUsd(totals.unpaidCents)} not paid yet` : "All paid"}
+                {totals.unpaidCents > 0
+                  ? t(locale, "workspace.notPaidYet", { amount: formatMoney(locale, totals.unpaidCents) })
+                  : t(locale, "workspace.allPaid")}
               </span>
             </dd>
           </div>
@@ -168,30 +193,30 @@ function ProjectHeader({ data, client }: ProjectHeaderProps) {
   );
 }
 
-function TicketsColumn({ entries, sendBlockedReason, className = "" }: TicketsColumnProps) {
+function TicketsColumn({ entries, sendBlockedReason, locale, className = "" }: TicketsColumnProps) {
   const open = entries.filter((e) => isUnpaid(e.order)).length;
 
   return (
     <section aria-labelledby="tickets-title" className={`min-w-0 ${className}`}>
       <div className="flex items-baseline justify-between gap-4">
         <h2 id="tickets-title" className="font-display text-[20px] leading-tight font-bold">
-          Tickets
+          {t(locale, "tickets.title")}
         </h2>
-        <p className="font-mono text-[12px] text-ink-2">
-          {entries.length} {entries.length === 1 ? "ticket" : "tickets"} · {open} open
+        <p className="font-mono text-[13px] text-ink-2">
+          {tCount(locale, "tickets.count", entries.length)} · {tCount(locale, "tickets.open", open)}
         </p>
       </div>
       {/* The slot new tickets print out of. */}
       <div aria-hidden="true" className="ticket-slot relative z-10 mt-3" />
       {entries.length === 0 ? (
         <p className="mt-3 text-[14px] leading-relaxed text-ink-2">
-          No tickets yet. When Claude finds a request outside the agreed scope, it prints a ticket here.
+          {t(locale, "tickets.empty")}
         </p>
       ) : (
         <ol className="ticket-row -mx-4 -mt-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pt-0 pb-3 sm:-mx-8 sm:px-8 lg:mx-0 lg:flex-col lg:gap-4 lg:overflow-visible lg:px-2 lg:pb-0">
           {entries.map((e) => (
             <li key={e.finding.id} className="w-[min(360px,calc(100vw-56px))] shrink-0 snap-start lg:w-auto">
-              <Ticket order={e.order} finding={e.finding} author={e.author} askedOn={e.askedOn} sendBlockedReason={sendBlockedReason} />
+              <Ticket order={e.order} finding={e.finding} author={e.author} askedOn={e.askedOn} sendBlockedReason={sendBlockedReason} locale={locale} />
             </li>
           ))}
         </ol>

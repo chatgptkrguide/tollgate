@@ -3,25 +3,19 @@
 import { useActionState, useEffect, useId, useRef, useState, type RefObject } from "react";
 import { flushSync } from "react-dom";
 import { resetDemo } from "@/app/actions";
-import type { ResetActionResult, ResetError } from "@/domain/action-result";
+import type { ResetActionResult } from "@/domain/action-result";
+import type { Locale } from "@/i18n/locales";
+import { t } from "@/i18n/t";
 
 export interface ResetDemoProps {
   projectId: string;
+  locale: Locale;
 }
-
-const errorText: Record<ResetError, string> = {
-  invalid_input: "This isn't your demo copy. Reload the page.",
-  not_found: "This isn't your demo copy. Reload the page.",
-  invalid_state: "The demo changed while resetting. Reload the page.", // reset never returns this today
-  server_error: "The demo couldn't be reset just now. Nothing changed; try again.",
-  invoice_open:
-    "A change order has a PayPal invoice the client can still pay, so the demo wasn't reset. Cancel that invoice first (a draft marked Send again: send it, then cancel it), then reset.",
-};
 
 // Puts the visitor's copy back to the starting demo, after a confirmation: it deletes every change made to it.
 // The server checks the id against the visitor cookie, and refuses while an invoice is still payable.
 // Quiet text buttons: a demo utility, not part of the contract under review.
-export function ResetDemo({ projectId }: ResetDemoProps) {
+export function ResetDemo({ projectId, locale }: ResetDemoProps) {
   const [confirming, setConfirming] = useState(false);
   // An answer closes the confirmation, whatever it says.
   const [state, resetAction, pending] = useActionState(async (prev: ResetActionResult | null, formData: FormData) => {
@@ -32,7 +26,7 @@ export function ResetDemo({ projectId }: ResetDemoProps) {
   const resetRef = useRef<HTMLButtonElement>(null);
   const keepRef = useRef<HTMLButtonElement>(null);
   const confirmId = useId();
-  const progress = pending ? "Resetting…" : state?.ok ? "Demo reset." : "";
+  const progress = pending ? t(locale, "reset.resetting") : state?.ok ? t(locale, "reset.done") : "";
 
   // "Reset demo" takes the confirm button's place once the answer is in, so focus goes back to it.
   useEffect(() => {
@@ -46,7 +40,7 @@ export function ResetDemo({ projectId }: ResetDemoProps) {
     target.current?.focus();
   };
   const QUIET =
-    "min-h-11 rounded-[8px] px-3 pt-0.5 font-display text-[14px] font-bold text-ink-2 transition-colors not-aria-disabled:hover:bg-canvas not-aria-disabled:hover:text-ink not-aria-disabled:active:translate-y-px";
+    "min-h-11 rounded-[8px] px-2 pt-0.5 whitespace-nowrap sm:px-3 font-display text-[14px] font-bold text-ink-2 transition-colors not-aria-disabled:hover:bg-canvas not-aria-disabled:hover:text-ink not-aria-disabled:active:translate-y-px";
 
   return (
     <form action={resetAction} data-action="reset-demo" className="flex flex-col items-end gap-1">
@@ -62,7 +56,7 @@ export function ResetDemo({ projectId }: ResetDemoProps) {
             aria-describedby={confirmId}
             className={QUIET}
           >
-            Keep my changes
+            {t(locale, "reset.keep")}
           </button>
           {/* aria-disabled while resetting, not disabled: a disabled button drops the focus it holds. */}
           <button
@@ -75,17 +69,17 @@ export function ResetDemo({ projectId }: ResetDemoProps) {
             }}
             className={`${QUIET} text-stop-ink aria-disabled:cursor-wait`}
           >
-            {pending ? "Resetting…" : "Confirm: reset demo"}
+            {pending ? t(locale, "reset.resetting") : t(locale, "reset.confirm")}
           </button>
         </div>
       ) : (
-        <button key="reset" ref={resetRef} type="button" onClick={() => swap(true, keepRef)} className={`-mr-3 ${QUIET}`}>
-          Reset demo
+        <button key="reset" ref={resetRef} type="button" onClick={() => swap(true, keepRef)} className={`-mr-2 sm:-mr-3 ${QUIET}`}>
+          {t(locale, "reset.reset")}
         </button>
       )}
       {confirming && (
         <p id={confirmId} className="max-w-xs text-right text-[13px] leading-relaxed">
-          This deletes every change you made to this demo and starts it over.
+          {t(locale, "reset.confirmHelp")}
         </p>
       )}
       {/* Always present, so screen readers announce each change of its text. */}
@@ -94,7 +88,7 @@ export function ResetDemo({ projectId }: ResetDemoProps) {
       </p>
       {state && !state.ok && (
         <p role="alert" className="max-w-xs border-l-2 border-stop pl-3 text-[13px] font-semibold text-ink">
-          {errorText[state.error]}
+          {t(locale, `resetErrors.${state.error}`)}
         </p>
       )}
     </form>

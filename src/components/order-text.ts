@@ -1,16 +1,22 @@
-import { formatShortDate } from "@/domain/dates";
 import { invoiceNumberFor } from "@/domain/invoice";
 import type { ChangeOrder, ChangeOrderStatus } from "@/domain/types";
+import { formatDate, formatNumber } from "@/i18n/format";
+import type { Locale } from "@/i18n/locales";
+import { t, tCount, type MessageKey } from "@/i18n/t";
 
 // One wording and one signal colour per status, shared by the tickets, the Scope list and the header.
 
-export const statusText: Record<ChangeOrderStatus, string> = {
-  draft: "Not sent yet",
-  sent: "Sent to client, not paid yet",
-  paid: "Paid",
-  waived: "Included at no charge",
-  cancelled: "Cancelled",
-};
+const statusKey = {
+  draft: "workspace.statusDraft",
+  sent: "workspace.statusSent",
+  paid: "workspace.statusPaid",
+  waived: "workspace.statusWaived",
+  cancelled: "workspace.statusCancelled",
+} as const satisfies Record<ChangeOrderStatus, MessageKey>;
+
+export function statusText(locale: Locale, status: ChangeOrderStatus): string {
+  return t(locale, statusKey[status]);
+}
 
 // STOP while money is still owed, GO once it's received, grey for work that is free or off.
 export type Tone = "stop" | "go" | "idle";
@@ -23,8 +29,11 @@ export const statusTone: Record<ChangeOrderStatus, Tone> = {
   cancelled: "idle",
 };
 
-export function statusLine(order: Pick<ChangeOrder, "status" | "paidAt">): string {
-  return order.status === "paid" && order.paidAt ? `${statusText.paid} ${formatShortDate(order.paidAt)}` : statusText[order.status];
+// "Paid Nov 5" once paid with a date, otherwise the status in words.
+export function statusLine(locale: Locale, order: Pick<ChangeOrder, "status" | "paidAt">): string {
+  return order.status === "paid" && order.paidAt
+    ? t(locale, "workspace.statusPaidOn", { date: formatDate(locale, order.paidAt) })
+    : statusText(locale, order.status);
 }
 
 export const noteId = (order: Pick<ChangeOrder, "id">) => `note-${order.id}`;
@@ -41,8 +50,8 @@ export function ticketNumber(orderId: string): string | null {
   }
 }
 
-// "≈ 8.7 h · +3 days"
-export function effortLine(hours: number, days: number): string {
-  const h = Number(hours.toFixed(1));
-  return `≈ ${h} h · +${days} ${days === 1 ? "day" : "days"}`;
+// "≈ 8.7 h · +3 days", "≈ 8.7시간 · +3일"; hours to one decimal.
+export function effortLine(locale: Locale, hours: number, days: number): string {
+  const h = formatNumber(locale, Number(hours.toFixed(1)));
+  return `${t(locale, "ticket.hours", { hours: h })} · +${tCount(locale, "delivery.days", days)}`;
 }

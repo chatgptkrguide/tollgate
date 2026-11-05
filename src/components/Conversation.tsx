@@ -1,22 +1,27 @@
 import type { ReactNode } from "react";
 import { Composer } from "@/components/Composer";
+import { Rich } from "@/components/Rich";
 import { ThreadScroll } from "@/components/ThreadScroll";
 import { noteId, quoteId, statusLineId, titleId } from "@/components/order-text";
-import { formatShortDate } from "@/domain/dates";
 import { segmentBody, type BodySegment } from "@/domain/segments";
 import type { ChangeOrder } from "@/domain/types";
 import type { FindingWithOrder, ThreadMessage } from "@/domain/workspace";
+import { formatDate } from "@/i18n/format";
+import type { Locale } from "@/i18n/locales";
+import { t, tCount, tRich } from "@/i18n/t";
 
 export interface ConversationProps {
   messages: readonly ThreadMessage[];
   clientName: string; // the client company
   client: string; // the person who writes ("Maya Lindqvist")
   reviewBlockedReason: string | null;
+  locale: Locale;
   className?: string;
 }
 
 interface MessageBubbleProps {
   message: ThreadMessage;
+  locale: Locale;
 }
 
 type Quoted = FindingWithOrder & { order: ChangeOrder };
@@ -33,7 +38,7 @@ interface SegmentProps {
 
 // The thread as a chat: the client's messages on the left, yours on the right, the composer at the bottom. On a wide
 // screen the column sticks under the app bar and scrolls on its own, so the composer stays in reach.
-export function Conversation({ messages, clientName, client, reviewBlockedReason, className = "" }: ConversationProps) {
+export function Conversation({ messages, clientName, client, reviewBlockedReason, locale, className = "" }: ConversationProps) {
   return (
     <section
       aria-labelledby="thread-title"
@@ -41,7 +46,7 @@ export function Conversation({ messages, clientName, client, reviewBlockedReason
     >
       <div className="flex items-baseline justify-between gap-4 border-b border-line px-5 py-3.5 sm:px-6">
         <h2 id="thread-title" className="font-display text-[17px] font-bold">
-          Conversation <span className="sr-only">with {clientName}</span>
+          <Rich parts={tRich(locale, "conversation.title", { client: clientName })} />
         </h2>
         <p className="hidden truncate text-[14px] text-ink-2 sm:block">
           {client} · {clientName}
@@ -49,15 +54,15 @@ export function Conversation({ messages, clientName, client, reviewBlockedReason
       </div>
       <ThreadScroll count={messages.length} className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-6 sm:px-6">
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+          <MessageBubble key={m.id} message={m} locale={locale} />
         ))}
       </ThreadScroll>
-      <Composer client={client} blockedReason={reviewBlockedReason} />
+      <Composer client={client} blockedReason={reviewBlockedReason} locale={locale} />
     </section>
   );
 }
 
-function MessageBubble({ message }: MessageBubbleProps) {
+function MessageBubble({ message, locale }: MessageBubbleProps) {
   // Every finding is stored with its change order; one without any isn't drawn.
   const quoted = message.findings.filter((f): f is Quoted => f.order !== null);
   const mine = message.from === "me";
@@ -65,8 +70,9 @@ function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <li className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
       <p className="px-1 font-display text-[13px] text-ink-2">
-        <span className="font-bold text-ink">{message.author}</span>
-        <span className="ml-2 font-mono text-[12px]">{formatShortDate(message.sentAt)}</span>
+        {/* Your own messages are signed "You" in the screen language; the client's name is data. */}
+        <span className="font-bold text-ink">{mine ? t(locale, "workspace.you") : message.author}</span>
+        <span className="ml-2 font-mono text-[12px]">{formatDate(locale, message.sentAt)}</span>
       </p>
       <p
         className={`mt-1.5 max-w-[min(62ch,88%)] px-4 py-3 text-[16px] leading-[1.65] ${
@@ -77,7 +83,7 @@ function MessageBubble({ message }: MessageBubbleProps) {
       </p>
       {quoted.length > 0 && (
         <p className="mt-1.5 px-1 font-mono text-[12px] text-ink-2">
-          {quoted.length} {quoted.length === 1 ? "ticket" : "tickets"} from this message
+          {tCount(locale, "conversation.ticketsFromMessage", quoted.length)}
         </p>
       )}
     </li>
