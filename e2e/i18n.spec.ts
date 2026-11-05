@@ -1,17 +1,14 @@
-import { createClient } from "@libsql/client";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 // The screen language (the visitor's tg_locale cookie) and the client language (the project's client_locale, what
 // new PayPal invoices are written in) on the server without PayPal or Claude keys. Chrome asks for English, so every
 // page opens in English until the visitor picks another language.
-const DB_URL = "file:data/e2e.db"; // the no-paypal server's database (playwright.config.ts)
 
-async function clientLocaleInDatabase(projectId: string): Promise<string | undefined> {
-  const db = createClient({ url: DB_URL });
-  await db.execute("PRAGMA busy_timeout = 5000");
-  const result = await db.execute({ sql: "SELECT client_locale FROM projects WHERE id = ?", args: [projectId] });
-  db.close();
-  return result.rows[0]?.client_locale?.toString();
+// The client language after a reload, rendered by the server from the database. (Reading data/e2e.db from the
+// test while the server writes it made the server's write fail with "database is locked".)
+async function storedClientLocale(page: Page): Promise<string> {
+  await page.reload();
+  return page.getByRole("combobox", { name: "Client's language" }).inputValue();
 }
 
 test.describe("화면 언어", () => {
@@ -60,25 +57,22 @@ test.describe("화면 언어", () => {
 test.describe("클라이언트 언어", () => {
   test("고르면 저장되어 새로고침해도 남고, 화면 언어는 바뀌지 않는다", async ({ page }) => {
     await page.goto("/");
-    const projectId = (await page.getByTestId("workspace").getAttribute("data-project-id")) ?? "";
     const select = page.getByRole("combobox", { name: "Client's language" });
     await expect(select).toHaveValue("en");
     await expect(page.getByText("New PayPal invoices are written in this language.")).toBeVisible();
 
     await select.selectOption("ja");
 
-    await expect.poll(() => clientLocaleInDatabase(projectId)).toBe("ja");
-    await page.reload();
-    await expect(page.getByRole("combobox", { name: "Client's language" })).toHaveValue("ja");
+    await expect.poll(() => storedClientLocale(page)).toBe("ja");
     await expect(page.getByRole("combobox", { name: "Language", exact: true })).toHaveValue("en");
     await expect(page.getByRole("button", { name: "Check scope" })).toBeVisible();
   });
 
   test("데모를 초기화하면 클라이언트 언어는 영어로 돌아간다", async ({ page }) => {
     await page.goto("/");
-    const projectId = (await page.getByTestId("workspace").getAttribute("data-project-id")) ?? "";
-    await page.getByRole("combobox", { name: "Client's language" }).selectOption("es");
-    await expect.poll(() => clientLocaleInDatabase(projectId)).toBe("es");
+    const select = page.getByRole("combobox", { name: "Client's language" });
+    await select.selectOption("es");
+    await expect.poll(() => storedClientLocale(page)).toBe("es");
 
     await page.getByRole("button", { name: "Reset demo" }).click();
     await page.getByRole("button", { name: "Confirm: reset demo" }).click();

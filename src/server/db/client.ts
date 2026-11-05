@@ -13,7 +13,13 @@ export function createDb(url?: string, authToken?: string) {
   if (target.startsWith("file:") && !target.includes(":memory:")) {
     mkdirSync(dirname(target.slice("file:".length)), { recursive: true });
   }
-  return drizzle({ client: createClient(token ? { url: target, authToken: token } : { url: target }), schema });
+  const client = createClient(token ? { url: target, authToken: token } : { url: target });
+  // A local file shared with another process (a second server, a test reading it) waits up to 5 s for a lock instead
+  // of failing at once with SQLITE_BUSY. Remote (Turso) and in-memory databases don't need it.
+  if (target.startsWith("file:") && !target.includes(":memory:")) {
+    client.execute("PRAGMA busy_timeout = 5000").catch(() => {});
+  }
+  return drizzle({ client, schema });
 }
 
 export type Db = ReturnType<typeof createDb>;
