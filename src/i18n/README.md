@@ -1,7 +1,8 @@
 # Languages: wiring guide
 
-The language infrastructure is in place; the components in `src/components/` still print English literals. This page
-says how to switch them over. The design is in `docs/ARCHITECTURE.md` §12.
+The components in `src/components/` are switched over (`wp/i18n-wire`): `page.tsx` reads the locale and passes it down,
+and every interface text goes through the catalogs. This page says how that works, for the next text you add. The design
+is in `docs/ARCHITECTURE.md` §12.
 
 ## Files
 
@@ -33,10 +34,10 @@ returns `ActionResult` and refreshes the page. `data.project.clientLocale` alrea
    from the English text, so a missing or extra one is a compile error.
 4. Counts: `tCount(locale, "delivery.days", row.days)` instead of `` `${days} ${days === 1 ? "day" : "days"}` ``.
    Keep a leading `+` outside the text (`` `+${tCount(…)}` ``).
-5. Bold, links and no-wrap spans: `tRich(locale, "guide.step1Target", { author, sentOn })` returns
-   `{ tag, text }[]`; map `tag === "b"` to `<b>`, `"link"` to the `<a>`, `"nowrap"` to
-   `<span className="whitespace-nowrap">`, `null` to plain text. Key the parts by index-free values (for example
-   `` `${tag}-${offset}` ``), as `MarkedBody` does.
+5. Bold, links, no-wrap spans and screen-reader-only text: `tRich(locale, "guide.step1Target", { author, sentOn })`
+   returns `{ tag, text }[]`; `<Rich parts={…} link={(text) => <a …>{text}</a>} />` (`src/components/Rich.tsx`) draws
+   `b` as `<b>`, `link` through the function, `nowrap` as `<span className="whitespace-nowrap">`, `sr` as
+   `<span className="sr-only">` and the rest as plain text.
 6. Money and dates: `formatMoney(locale, cents)` for `formatUsd(cents)`, `formatDate(locale, iso)` for
    `formatShortDate(iso)`. Values that go to PayPal stay on the server's own formatting (already done).
 7. `toLocaleString("en-US")` in Composer's `too_long`: use `formatNumber(locale, MAX_REVIEW_MESSAGE_CHARS)`.
@@ -50,14 +51,17 @@ Do not translate data: message bodies and authors from the seed (except that a `
 reasons, `SAMPLE_MESSAGE` in Composer (a client's message, and Claude compares it with an English scope), and activity
 summaries (stored English text written by the server). Product names (Tollgate, PayPal, Claude, Devpost) stay as they are.
 
-## Checklist
+## Where the texts are
 
-| Where | Strings now | Keys |
+| Where | Texts | Keys |
 |:--|:--|:--|
-| `app/layout.tsx` | metadata description | `meta.description` (needs `generateMetadata` reading the locale; optional) |
+| `app/layout.tsx` | metadata description | `meta.description` (not wired: the static shell keeps the English description; it would need `generateMetadata` reading the locale) |
 | `app/page.tsx` | `SEND_BLOCKED_REASON`, `REVIEW_BLOCKED_REASON`, "Reload the page to start your demo." | `page.*` |
 | `WorkspaceSkeleton` | "Loading your demo copy…" | `skeleton.loading` |
-| `Workspace` | header totals, "not paid yet", sr-only conversation title, margin note status and "Not in the agreed scope", sr-only quote, "about N more days", `statusText` | `workspace.*` |
+| `Workspace`, `order-text.ts` | header totals, "not paid yet", "All paid", "agreed …", "You", the status texts | `workspace.*` |
+| `Workspace` › tickets column | "Tickets", ticket and open counts, empty text | `tickets.*` |
+| `Ticket` | `TICKET`, "≈ 13 h", "{author}, {date}:", sr-only "Show in the message", "Not in the agreed scope.", gate captions, stamps | `ticket.*` |
+| `Conversation` | heading (with sr-only "with {client}"), tickets from this message | `conversation.*` |
 | `Workspace` › `ScopePanel` | "Scope", "Version 1, agreed …", "Change orders", totals labels | `scope.*` |
 | `Workspace` › `ActivityPanel` | "Activity", lead, empty text (actor names stay) | `activity.*` |
 | `ChangeOrderActions` | button labels and busy labels, confirmation and resend help, payer page link and its sr-only "(opens in a new tab)", sandbox note | `changeOrder.*` |
@@ -67,12 +71,12 @@ summaries (stored English text written by the server). Product names (Tollgate, 
 | `DeliveryPanel` | title, lead, "Launch", sr-only moved text, empty text, "moves the launch to …", state texts, day counts | `delivery.*` |
 | `DemoGuide` | summary, Show/Hide, the three steps (rich), "Go to the change order", footer (rich) | `guide.*` |
 | `ResetDemo` | buttons, confirmation help, "Demo reset.", `errorText` | `reset.*`, `resetErrors.*` |
-| new: header | `LocaleSwitcher` next to Reset demo | `localeSwitcher.label` |
-| new: project header or Scope panel | a client language `<select>` calling `setClientLocale(project.id, value)`, with its label and help, and `clientLocale.saveFailed` on a failed answer | `clientLocale.*` |
+| App bar | `LocaleSwitcher` in `#locale-slot`, next to Reset demo | `localeSwitcher.label` |
+| Project header (`ClientLocaleSelect`) | a client language `<select>` calling `setClientLocale(project.id, value)`, with its label and help, and `clientLocale.saveFailed` on a failed answer | `clientLocale.*` |
 
-When the components are switched over, the browser tests still read English (the default for a browser without a
-`tg_locale` cookie whose `Accept-Language` is English), so they keep passing. Add one that picks 한국어 in the switcher
-and sees `범위 확인`, and one that sets the client language and checks the invoice body in the PayPal run.
+The browser tests read English (the default for a browser without a `tg_locale` cookie whose `Accept-Language` is
+English). `e2e/i18n.spec.ts` picks 한국어 in the switcher and sees `범위 확인`, and sets the client language; a PayPal-run
+test that checks the invoice body in another language is still to write.
 
 ## Adding or changing a text
 

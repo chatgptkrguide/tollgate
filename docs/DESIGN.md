@@ -38,20 +38,22 @@ Every state is written out: a lamp, a stripe or a colour is always next to words
 
 ## Layout
 
-**Wide screens (≥1024 px).** A sticky app bar: the barrier glyph and "Tollgate", the client and project, an empty `<div id="locale-slot">` reserved for the language switcher, and Reset demo. Under it the folding demo guide, then the project header with the client, the project and the big "Total with changes" figure with its chip ("$650 not paid yet" in STOP, or "All paid" in GO). The main grid has the conversation on the left (it sticks under the app bar and scrolls on its own, opening at the latest message, with the composer at its foot) and a 420 px right column: Tickets, then Delivery, Scope and Activity.
+**Wide screens (≥1024 px).** A sticky app bar: the barrier glyph and "Tollgate", the client and project, the language switcher in `<div id="locale-slot">`, and Reset demo. Under it the folding demo guide, then the project header with the client, the project, the "Client's language" select with its one-line hint ("New PayPal invoices are written in this language."), and the big "Total with changes" figure with its chip ("$650 not paid yet" in STOP, or "All paid" in GO). The main grid has the conversation on the left (it sticks under the app bar and scrolls on its own, opening at the latest message, with the composer at its foot) and a 420 px right column: Tickets, then Delivery, Scope and Activity.
 
-**Phones (390 px).** App bar, guide, header and total, then the tickets as a horizontal scroll-snap row (the next ticket peeks in), the conversation and composer, then Delivery, Scope and Activity. Every control is at least 44 px tall and there is no horizontal page scroll.
+**Phones (390 px).** App bar (the switcher drops its globe and Reset demo its padding so the bar stays one line in every language), guide, header and total, then the tickets as a horizontal scroll-snap row (the next ticket peeks in), the conversation and composer, then Delivery, Scope and Activity. Every control is at least 44 px tall and there is no horizontal page scroll.
+
+**Languages.** Both language controls are native `<select>`s styled as `.select`: Overpass 700 at 16 px (no iOS zoom), 44 px tall, an 8 px radius, a `field` border (`line` for the quieter app-bar one) that turns `ink` on hover, an ink chevron and the usual 2 px focus ring. Each language is written in itself. Every text on the screen follows the visitor's language; money stays USD in the locale's way of writing it ("US$650", "650 US$"), and the client's messages, titles and Claude's reasons stay as written.
 
 ## The ticket
 
 Top to bottom:
 
-1. `TICKET` and the PayPal invoice number the order will carry (`TG-` + 22 characters, the same number the client sees on the PayPal page), in mono.
+1. `TICKET` (チケット, 티켓 in Japanese and Korean) and the PayPal invoice number the order will carry (`TG-` + 22 characters, the same number the client sees on the PayPal page), in mono.
 2. The status line: a round lamp (STOP for draft and sent, GO for paid, grey for included or cancelled) and the status in words. It is the `role="status"` element that takes focus after an action.
 3. The title, the amount (struck through when included or cancelled), and "≈ 13 h · +3 days".
 4. Who asked and when, with the quoted phrase as a link back to the message. Drafts add "Not in the agreed scope." and Claude's reason.
 5. A perforation: a dashed tear line with a half-circle notch cut into each side.
-6. The stub's lane: a post with its lamp, the striped arm resting on a fork, a caption ("Work locked until paid", "Work unlocked"), and a stamp ("Sent · PayPal", "Paid · Nov 5", "No charge", "Void"). The arm is down while the work is locked and up (−80°) once it is paid or included.
+6. The stub's lane: a post with its lamp, the striped arm resting on a fork, a caption ("Work locked until paid", "Work unlocked"), and a stamp ("Sent · PayPal", "Paid · Nov 5", "No charge", "Void"), both in the screen language. The arm is down while the work is locked and up (−80°) once it is paid or included. The lane is 96 px tall with the gate down and 168 px with it up, so about 140 px of the raised arm shows above the post (it runs on past the tear line, where the lane clips it) and the stamp moves to mid-lane, clear of the arm.
 7. The actions for that status: Send change order / Include at no charge, the client's PayPal page / Check payment / Cancel invoice, or Quote again.
 
 Pointing at or focusing a ticket outlines its phrase in the message, and the other way round; the phrase is a link to its ticket, and the ticket's quote is a link to the phrase. Both outline when they are the URL's target.
@@ -64,11 +66,11 @@ A strip from the agreed launch: one stretch per change order, as wide as its day
 
 ## Motion
 
-Functional feedback everywhere, one expressive moment (the gate lift). Only `transform`, `opacity`, colour and `clip-path` are animated; there are no animation libraries. Under `prefers-reduced-motion: reduce` nothing moves: `MotionDirector` marks nothing and the CSS turns the remaining animations off, so the new state simply shows.
+Functional feedback everywhere, one expressive moment (the gate lift). Only `transform`, `opacity`, colour and `clip-path` are animated; there are no animation libraries. Under `prefers-reduced-motion: reduce` nothing moves: `MotionDirector` marks nothing and the CSS turns the remaining animations off (pseudo-elements included), so the new state simply shows, the lamps already in the status colour.
 
 | # | What | How |
 |:--|:--|:--|
-| 1 | **Gate lift** when a ticket turns paid | The arm rotates up around its post in 700 ms with a slight overshoot (to −87°, settling at −80°); the lamp switches STOP → GO at about 300 ms; the "Paid" stamp lands at about 500–700 ms; the header total settles from STOP to GO and its chip pops in; the delivery stretch loses its stripes; the launch date flips. Including an order at no charge opens the gate the same way, in grey. |
+| 1 | **Gate lift** when a ticket turns paid | The arm rotates up around its post in 700 ms with a slight overshoot (to −87°, settling at −80°) inside the taller raised-gate lane; the lamps switch STOP → GO in one step at about 300 ms; the "Paid" stamp lands at about 500–700 ms; the header total settles from STOP to GO and its chip pops in; the delivery stretch loses its stripes; the launch date flips. Including an order at no charge opens the gate the same way, in grey. |
 | 2 | Ticket printing | A new draft slides 48 px down out of the slot in 420 ms (`clip-path` keeps it hidden above the slot). |
 | 3 | Mark draw-in | A draft's phrase underlines left to right in 500 ms when it appears. |
 | 4 | Checking scope | While Claude reads, a 2 px STOP line sweeps the textarea and the button shows "Checking…" with a running bar along its bottom edge. |
@@ -80,7 +82,8 @@ Functional feedback everywhere, one expressive moment (the gate lift). Only `tra
 
 ## Files
 
-- `src/app/globals.css`: tokens, buttons, lamp, chip, ticket, perforation, lane, stamp, road, all keyframes and the reduced-motion rules.
+- `src/app/globals.css`: tokens, buttons, selects, per-language line breaking, lamp, chip, ticket, perforation, lane, stamp, road, all keyframes and the reduced-motion rules.
 - `src/components/Ticket.tsx`, `Conversation.tsx`, `DeliveryPanel.tsx`, `ScopePanel.tsx`, `ActivityPanel.tsx`, `Workspace.tsx`: server components.
-- `MotionDirector.tsx`, `LinkHighlighter.tsx`, `CountingAmount.tsx`, `ThreadScroll.tsx`: small client components, no state shared through React.
+- `MotionDirector.tsx`, `LinkHighlighter.tsx`, `CountingAmount.tsx`, `ThreadScroll.tsx`, `ClientLocaleSelect.tsx` and `src/i18n/LocaleSwitcher.tsx`: small client components, no state shared through React.
+- `Rich.tsx`: draws a translated text's marks (bold, link, no-wrap, screen-reader-only).
 - `src/app/icon.svg` and `BarrierGlyph.tsx`: the barrier glyph.
