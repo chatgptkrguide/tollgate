@@ -1,58 +1,85 @@
 # Tollgate
 
-Catch scope creep in client messages and bill it with PayPal before you do the extra work.
+Catch scope creep in client messages and bill it with a PayPal invoice before you do the extra work.
 
-Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (2026). Work in progress.
+Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (2026).
+
+**Live demo:** https://tollgate-ratq.onrender.com (PayPal sandbox only)
+
+The demo runs on a free server that sleeps after 15 idle minutes. The first visit can take about one minute to wake it; after that it is fast.
+
+![Tollgate workspace: a client project with an agreed scope, a change order and the total](docs/images/screen-r2-desktop.png)
 
 ## The problem
 
-Freelancers who work with overseas clients agree on a scope, then the requests keep coming in chat and email: "could you also add…". Each one feels too small to price, so the extra work goes unpaid, and asking for money later feels awkward. Getting paid in USD from abroad is its own chore.
+Freelancers who work with overseas clients agree on a scope, then the requests keep coming in chat and email: "could you also add...". Each one feels too small to price, so the extra work goes unpaid, and asking for money later feels awkward. Getting paid in USD from abroad is its own chore.
 
-## How it works
+Getting paid is a real problem for freelancers. In the Freelancers Union study [The Costs of Nonpayment](https://onlabor.org/wp-content/uploads/2017/05/FU_NonpaymentReport_r3.pdf) (5,358 U.S. freelancers surveyed in July 2015), one in two had trouble getting paid in 2014, and 71% had trouble collecting at some point in their career. Freelancers lost an average of $5,968 in unpaid income in 2014, which the report puts at 13% of the average respondent's annual income.
 
-The goal:
+The group is large: the Upwork Research Institute's Future Workforce Index (press release on upwork.com, April 23, 2025; 3,000 U.S. skilled knowledge workers) found that 28% of them freelance, more than 20 million people.
+
+These studies measure unpaid and late payment in general. They do not measure scope creep on its own, and we found no reliable recent number for it, so we do not claim one.
+
+## What it does
 
 1. Paste a new client message into the project.
-2. Claude compares it with the agreed scope and marks the phrases that add work. It estimates the hours; the price comes from your own hourly rate.
-3. You review the mark and send a change order. Tollgate creates and sends a PayPal invoice for it.
-4. When the client pays, a PayPal webhook marks the change order as paid and the project total updates.
+2. Claude compares it with the agreed scope and marks the phrases that add work. It estimates the hours. The price is hours x your hourly rate, computed by the app.
+3. You review the marks and send a change order. Tollgate creates and sends a PayPal invoice for it.
+4. When the client pays, a PayPal webhook marks the change order as paid and the project total turns green.
 
-The agent proposes; nothing is billed until you approve it. The design and the plan the code follows are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+The agent proposes; nothing is billed until you approve it. Every step Claude and the app take is written to an activity panel next to the workspace, including what was sent to PayPal.
 
-## What works today
+Coming (in progress, not in the live demo yet): a view where an unpaid change order holds its delivery date, and payment unlocks the work.
 
-All four steps are built. The first Render deploy is still in progress, so Claude's review has run on a local server, not yet on the public demo.
+## Try it
 
-- **Demo copy.** Each browser gets its own copy of one sample project (a fictional coffee shop client), with its scope, messages and change orders stored in SQLite. "Reset demo" asks for a confirmation, then starts the copy over; it refuses while a change order has a PayPal invoice the client can still pay, so a payment is never left with nothing to record it. Copies unused for seven days are deleted, except one with such an invoice.
-- **Claude scope review.** Paste a client message and press "Check scope". Claude reads it against the agreed scope and the change orders already quoted, and proposes the requests that add work, with a quote, a title, an hour estimate and a reason. Only quotes found word for word in the message are marked; the price comes from the project's hourly rate, never from Claude. Each proposal is a draft until you act on it. Claude reviews are capped per copy and per server; without `ANTHROPIC_API_KEY` the button stays off and says why. The two marks already in the demo's older messages are sample data written by hand. `pnpm eval:review` runs six test messages against the real model.
-- **Activity panel.** Every step is listed in order: the message read, what Claude marked, how each price was worked out, the invoice created and sent, the payment confirmed.
-- **PayPal invoices (sandbox).** "Send change order" creates and sends a PayPal invoice from the order's database row; a sent invoice can be cancelled, a cancelled order quoted again, and a draft included at no charge. Without sandbox keys the send button stays off and says why. The whole server sends at most 10 invoices a minute and 200 a day.
-- **Payment webhook.** `POST /api/webhooks/paypal` handles `INVOICING.INVOICE.PAID`: it checks the signature with PayPal (`verify-webhook-signature`, using `PAYPAL_WEBHOOK_ID`), reads the invoice back from PayPal, and marks the order paid only if the reference, amount and currency match; the totals then show it as paid. Without `PAYPAL_WEBHOOK_ID` every event is refused with 503, so PayPal retries later. The handler is covered by unit tests with a stand-in PayPal; a delivery from PayPal to the deployed app has not been checked yet. "Check payment" on a sent order reads the same invoice from PayPal and settles it the same way, so a payment can be confirmed without the webhook.
-- **Health and deploy.** `/api/health/live` checks the database, `/api/health` also gets a PayPal token. `render.yaml` defines the Render service; the first deploy is in progress.
+1. Open the [live demo](https://tollgate-ratq.onrender.com). Each visitor gets a private sandbox copy of a demo project, so you can't break anyone else's. **Reset demo** puts your copy back.
+2. Open the change order for the loyalty page and press **Send change order**. Tollgate creates and sends a PayPal sandbox invoice. One copy can send up to 20 invoices per 24 hours.
+3. Pay it as the client. Use the invoice's payer link and sign in with a PayPal sandbox personal (buyer) account. The credentials are in the private testing-instructions field of our Devpost submission; they are not in this repository.
+4. Return to Tollgate. The change order shows **Paid** and the total turns green. If the webhook is late, press **Check payment**.
 
-## Built with
+Claude scope review: it works in a local run with a key (see below). On the public demo it is off for now, so the message box shows why. [TODO before submit: update this line once a key is set on the server.]
 
-- Next.js 16, TypeScript, Tailwind CSS 4, Node.js 22
-- PayPal REST APIs in the sandbox: Invoicing and Webhooks
-- Claude (Anthropic API, `claude-opus-5-5`) for scope review
-- SQLite through libSQL and Drizzle
+![Claude marking extra work in a client message (local run with a Claude key)](docs/images/screen-r2-claude-review-local.png)
+
+*Local run with a Claude key. The data is fictional demo data.*
+
+## How PayPal is used
+
+All calls are sandbox REST calls made by the server, from a button the freelancer pressed. Claude never sees PayPal credentials.
+
+- **Invoicing API:** create a draft invoice, send it, read back the payer link, cancel a sent invoice.
+- **Idempotent invoice numbers:** in our sandbox tests the Invoicing API ignored `PayPal-Request-Id`, so the app makes its own guard: the invoice number comes from the change order id, and the database marks a send before the call. A double click or a retry cannot create a second invoice. The app saves the invoice id before it sends.
+- **Webhooks:** PayPal posts `INVOICING.INVOICE.PAID` to `/api/webhooks/paypal`. The server checks the signature with PayPal's verify-webhook-signature call, records each event id once, and reads the invoice back before it marks anything paid (it also checks the amount and that the currency is USD). A request that fails verification is refused.
+- **Check payment fallback:** if a webhook is late or lost, one button reads the invoice from PayPal and applies the same rule. A webhook and a click can't both change the status.
+
+## How Claude is used
+
+Claude reviews each new client message against the agreed scope and returns structured findings: the exact quote, a title, an hours estimate and a reason. The app checks that each quote really appears in the message, then computes the price itself (hours x hourly rate). The person decides what to send. Claude does not set prices, create or send invoices, or call PayPal.
+Calls are capped: 10 reviews per demo copy per day, and a per-minute and 100-per-day cap across the server; the counts live in the database, so resetting a copy does not refill them. Locally, a set of six test messages passes (`pnpm eval:review`). Claude Code also helped build this project; see the last section.
+
+## Architecture in brief
+
+Next.js (App Router) server actions call plain TypeScript domain rules (`src/domain`: status transitions and money math in integer cents), a Drizzle database layer (SQLite locally, Turso on the demo), the PayPal REST client, and the Claude review. The browser sends ids, not amounts. The database repeats the core rules as CHECK constraints. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
 
 ## Run locally
 
-Needs Node.js 22 (`.nvmrc`) and pnpm 10.
-
 ```bash
 pnpm install
-cp .env.example .env.local   # optional: PayPal sandbox keys; without them sending stays off
+cp .env.example .env.local   # add PayPal sandbox keys, a webhook id, and an Anthropic key
 pnpm db:migrate              # create data/tollgate.db; each browser gets its own demo copy on first visit
 pnpm dev
 ```
 
-The webhook needs a public URL, so locally use "Check payment" (or a tunnel) to see a payment arrive. `pnpm check` runs lint, typecheck and the unit tests; `pnpm e2e` builds the app and runs the browser tests.
+Useful commands: `pnpm check` (lint, typecheck, unit tests), `pnpm e2e`, `pnpm eval:review` (needs a Claude key), `pnpm accept:sandbox` (needs PayPal sandbox keys). Without `ANTHROPIC_API_KEY` the review box stays off and says why. Without `PAYPAL_WEBHOOK_ID` every webhook is refused.
 
-## Trying it in the PayPal sandbox
+## Built with
 
-Judge test steps and a sandbox buyer account will be listed in the Devpost submission.
+Next.js 16, React 19, TypeScript, Tailwind CSS 4, libSQL and Drizzle (SQLite locally, Turso hosted), PayPal REST APIs (Invoicing and Webhooks, sandbox), the Anthropic API (Claude), Render for hosting.
+
+## AI tools used to build it
+
+Claude Code (Anthropic) assisted the development: it wrote and reviewed parts of the code, tests and documentation under the author's direction, and the author reviewed and tested the result. The Claude API is also a runtime part of the product, as described above.
 
 ## License
 
