@@ -8,7 +8,7 @@ Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (202
 
 The demo runs on a free server that sleeps after 15 idle minutes. The first visit can take about one minute to wake it; after that it is fast.
 
-![Tollgate workspace: a client project with an agreed scope, a change order and the total](docs/images/screen-r2-desktop.png)
+![Tollgate workspace: the client conversation with a marked request, its change order as a toll ticket, and the total with what is not paid yet](docs/images/screen-ticket-desktop.png)
 
 ## The problem
 
@@ -30,7 +30,7 @@ These studies measure unpaid and late payment in general. They do not measure sc
 
 The agent proposes; nothing is billed until you approve it. Every step Claude and the app take is written to an activity panel next to the workspace, including what was sent to PayPal.
 
-Extra work stays locked until it is paid: the Delivery panel shows each change order as locked (purple) or unlocked (green), and the launch date only moves for work the client has paid for or that you chose to include for free.
+Extra work stays locked until it is paid: the Delivery panel shows each change order as locked (striped, orange-red) or unlocked (green), and the launch date only moves for work the client has paid for or that you chose to include for free.
 
 ## Try it
 
@@ -61,7 +61,7 @@ Calls are capped: 10 reviews per demo copy per day, and a per-minute and 100-per
 
 ## Architecture in brief
 
-Next.js (App Router) server actions call plain TypeScript domain rules (`src/domain`: status transitions and money math in integer cents), a Drizzle database layer (SQLite locally, Turso on the demo), the PayPal REST client, and the Claude review. The browser sends ids, not amounts. The database repeats the core rules as CHECK constraints. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
+Next.js (App Router) server actions call plain TypeScript domain rules (`src/domain`: status transitions and money math in integer cents), a Drizzle database layer (SQLite locally, Turso on the demo), the PayPal REST client, and the Claude review. The browser sends ids, not amounts. The database repeats the core rules as CHECK constraints. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design and [docs/DESIGN.md](docs/DESIGN.md) for the visual design.
 
 ## Run locally
 
