@@ -127,13 +127,19 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
     </p>
   );
   // Each action keeps its last answer until it runs again; a success changes the status, which hides the panel.
+  // "Not paid yet" is an answer, not a failure: it reads as a calm status line, not an alert.
   const errorFor = (state: ActionResult | BillingActionResult | null, texts: Partial<Record<ActionError | PayPalActionError, string>> = {}) =>
     state &&
-    !state.ok && (
+    !state.ok &&
+    (state.error === "not_paid_yet" ? (
+      <p role="status" className="mt-2 text-sm leading-relaxed text-ink-soft">
+        {errorText.not_paid_yet}
+      </p>
+    ) : (
       <p role="alert" className="mt-2 border-l-2 border-mark pl-3 text-sm font-semibold text-ink">
         {texts[state.error] ?? errorText[state.error]}
       </p>
-    );
+    ));
 
   if (order.status === "draft") {
     // An earlier send got as far as creating the PayPal invoice, and the client may already have it (P2-D1).
@@ -226,6 +232,12 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId }: C
             Open the client&apos;s PayPal page
             <span className="sr-only"> (opens in a new tab)</span>
           </a>
+        )}
+        {order.payerViewUrl && (
+          <p className="text-sm leading-relaxed text-ink-soft">
+            Pay it as the client with the sandbox buyer account from the Devpost testing notes. This page turns green
+            when PayPal confirms.
+          </p>
         )}
         {/* When the webhook is late: reads the invoice from PayPal and marks it paid if PayPal says so. */}
         <form action={checkAction} data-action="check-payment" className="mt-2">

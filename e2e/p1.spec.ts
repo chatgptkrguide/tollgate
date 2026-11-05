@@ -99,7 +99,7 @@ test.describe("P1 인수 시험", () => {
     await expect(page.getByText("Included at no charge").first()).toBeVisible();
     await page.reload();
 
-    await expect(page.getByText("Included at no charge")).toHaveCount(2); // 메모 1 + 합계 패널 1
+    await expect(page.getByText("Included at no charge")).toHaveCount(3); // 메모 1 + 합계 패널 1 + 납품 패널 1
     await expect(page.getByRole("button", { name: WAIVE, exact: true })).toHaveCount(0);
     await expect(page.getByText(/already updated|Something went wrong/)).toHaveCount(0);
     await context.close();

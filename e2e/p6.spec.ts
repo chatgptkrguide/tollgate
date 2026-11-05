@@ -35,7 +35,7 @@ test.describe("P6 납품 일정", () => {
 
     const loyalty = row(page, "Loyalty page with customer login");
     await expect(loyalty).toHaveAttribute("data-delivery-state", "included");
-    await expect(loyalty).toContainText("Included, no charge");
+    await expect(loyalty).toContainText("Included at no charge");
     await expect(page.getByTestId("delivery-launch")).toContainText("agreed Nov 15, now Nov 19");
     await expect(delivery(page)).not.toContainText("Paying the locked work");
     await context.close();

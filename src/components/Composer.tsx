@@ -49,11 +49,16 @@ export function Composer({ client, blockedReason }: ComposerProps) {
     if (result.ok) setText((current) => (current === sent ? "" : current));
     return result;
   }, null);
+  // Pressing Check scope while checking is off says why in the result line, so the press is never a dead click.
+  const [blockedPressed, setBlockedPressed] = useState(false);
   const off = pending || blockedReason !== null;
+  const showBlocked = blockedReason !== null && blockedPressed && !pending;
 
   // aria-disabled, not disabled: keyboard and screen reader users can still reach it and hear why.
   const stopIfOff = (event: MouseEvent<HTMLButtonElement>) => {
-    if (off) event.preventDefault();
+    if (!off) return;
+    event.preventDefault();
+    if (blockedReason !== null) setBlockedPressed(true);
   };
 
   return (
@@ -92,13 +97,14 @@ export function Composer({ client, blockedReason }: ComposerProps) {
           {pending ? "Checking…" : "Check scope"}
         </button>
       </div>
+      {/* Once pressed, the reason moves into the result line below; this copy stays for aria-describedby. */}
       {blockedReason && (
-        <p id="check-blocked" className="mt-2 max-w-[62ch] text-sm leading-relaxed text-ink-soft">
+        <p id="check-blocked" className={showBlocked ? "sr-only" : "mt-2 max-w-[62ch] text-sm leading-relaxed text-ink-soft"}>
           {blockedReason}
         </p>
       )}
       <p role="status" className="mt-2 max-w-[62ch] text-sm leading-relaxed" data-testid="review-result">
-        {pending ? "Claude is reading the message. This can take up to a minute." : resultText(state)}
+        {pending ? "Claude is reading the message. This can take up to a minute." : showBlocked ? blockedReason : resultText(state)}
       </p>
     </form>
   );

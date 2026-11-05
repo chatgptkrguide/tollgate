@@ -17,13 +17,13 @@ interface LockMarkProps {
 const lineColor: Record<DeliveryState, string> = {
   locked: "border-mark",
   unlocked: "border-paid",
-  included: "border-paid",
+  included: "border-rule",
 };
 
 const textColor: Record<DeliveryState, string> = {
   locked: "text-mark",
   unlocked: "text-paid",
-  included: "text-paid",
+  included: "text-ink-soft",
 };
 
 function stateText(row: DeliveryRow): string {
@@ -33,7 +33,7 @@ function stateText(row: DeliveryRow): string {
     case "unlocked":
       return row.unlockedAt ? `Unlocked ${formatShortDate(row.unlockedAt)}` : "Unlocked";
     case "included":
-      return "Included, no charge";
+      return "Included at no charge";
   }
 }
 
@@ -46,7 +46,7 @@ export function DeliveryPanel({ plan, className = "" }: DeliveryPanelProps) {
   const launch = formatShortDate(plan.launch);
 
   return (
-    <section aria-labelledby="delivery-title" className={`rounded-md border border-rule bg-sheet px-5 py-6 ${className}`} data-testid="delivery-panel">
+    <section aria-labelledby="delivery-title" className={`rounded-md border border-rule bg-sheet px-6 py-6 ${className}`} data-testid="delivery-panel">
       <h2 id="delivery-title" className="font-serif text-[22px]">
         Delivery
       </h2>
@@ -61,7 +61,7 @@ export function DeliveryPanel({ plan, className = "" }: DeliveryPanelProps) {
                 agreed {agreed}, now {launch}
               </span>
               <span aria-hidden="true">
-                <span className="text-ink-soft">{agreed}</span>
+                <span className="text-ink-soft line-through decoration-ink-soft/60">{agreed}</span>
                 <span className="mx-1.5 text-ink-soft">→</span>
                 <span className="font-semibold">{launch}</span>
               </span>

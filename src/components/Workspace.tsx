@@ -2,9 +2,11 @@ import type { ReactNode } from "react";
 import { ChangeOrderActions } from "@/components/ChangeOrderActions";
 import { Composer } from "@/components/Composer";
 import { DeliveryPanel } from "@/components/DeliveryPanel";
-import { DemoGuide } from "@/components/DemoGuide";
+import { DemoGuide, type GuideTarget } from "@/components/DemoGuide";
+import { RefreshOnReturn } from "@/components/RefreshOnReturn";
 import { ResetDemo } from "@/components/ResetDemo";
 import type { ActivityActor, ActivityEvent } from "@/domain/activity";
+import { isUnpaid } from "@/domain/change-order";
 import { formatShortDate } from "@/domain/dates";
 import { formatUsd } from "@/domain/money";
 import { segmentBody, type BodySegment } from "@/domain/segments";
@@ -19,7 +21,7 @@ export interface WorkspaceProps {
 }
 
 const statusText: Record<ChangeOrderStatus, string> = {
-  draft: "Waiting for your review",
+  draft: "Not sent yet",
   sent: "Sent to client, not paid yet",
   paid: "Paid",
   waived: "Included at no charge",
@@ -55,38 +57,58 @@ function statusLine(order: ChangeOrder): string {
 
 const moreDays = (days: number) => `about ${days} more ${days === 1 ? "day" : "days"}`;
 
+// The first change order the visitor can act on (draft or sent) and the message that asked for it, for the guide.
+function guideTarget(data: WorkspaceData): GuideTarget | null {
+  const order = data.changeOrders.find(isUnpaid);
+  const message = order && data.messages.find((m) => m.findings.some((f) => f.order?.id === order.id));
+  if (!order || !message) return null;
+  return { href: `#${noteId(order)}`, author: message.author.split(" ")[0], sentOn: formatShortDate(message.sentAt) };
+}
+
 // The whole screen is rendered on the server from the database; only the action forms run in the browser.
 export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReason }: WorkspaceProps) {
   const { project, totals } = data;
   const client = data.messages.find((m) => m.from === "client")?.author ?? project.clientName;
+  const awaitingPayment = data.changeOrders.some((o) => o.status === "sent");
 
   return (
     <div className="min-h-dvh" data-testid="workspace" data-project-id={project.id}>
-      <DemoGuide client={client} />
+      {awaitingPayment && <RefreshOnReturn />}
+      <div className="border-b border-rule bg-sheet">
+        <div className="mx-auto flex max-w-6xl items-start justify-between gap-4 px-4 py-3 sm:px-8">
+          {/* min-h-11 matches the Reset demo button, so the two share a baseline. */}
+          <p className="flex min-h-11 items-center font-serif text-[18px] font-semibold tracking-[-0.01em]">
+            <span className="border-b-2 border-mark leading-tight">Toll</span>
+            <span className="border-b-2 border-transparent leading-tight">gate</span>
+          </p>
+          <ResetDemo projectId={project.id} />
+        </div>
+      </div>
+      <DemoGuide
+        client={client}
+        reviewBlockedReason={reviewBlockedReason}
+        target={guideTarget(data)}
+        defaultOpen={activity.length === 0}
+      />
       <header className="border-b border-rule bg-sheet">
-        <div className="mx-auto max-w-6xl px-4 py-5 sm:px-8">
-          <div className="flex items-start justify-between gap-4">
-            <p className="pt-3 text-sm font-semibold tracking-tight">Tollgate</p>
-            <ResetDemo projectId={project.id} />
+        <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-x-10 gap-y-4 px-4 py-5 sm:px-8">
+          <div>
+            <h1 className="font-serif text-[28px] leading-tight">{project.clientName}</h1>
+            <p className="text-ink-soft">{project.title}</p>
           </div>
-          <div className="mt-1 flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
+          <dl className="flex gap-8 tabular-nums">
             <div>
-              <h1 className="font-serif text-[28px] leading-tight">{project.clientName}</h1>
-              <p className="text-ink-soft">{project.title}</p>
+              <dt className="text-sm text-ink-soft">Agreed</dt>
+              <dd className="text-[22px]">{formatUsd(totals.agreedCents)}</dd>
             </div>
-            <dl className="flex gap-8 tabular-nums">
-              <div>
-                <dt className="text-sm text-ink-soft">Agreed</dt>
-                <dd className="text-[22px]">{formatUsd(totals.agreedCents)}</dd>
-              </div>
-              <div>
-                <dt className="text-sm text-ink-soft">With changes</dt>
-                <dd className={`text-[22px] font-semibold ${totals.hasUnpaid ? "text-mark" : "text-paid"}`}>
-                  {formatUsd(totals.totalCents)}
-                </dd>
-              </div>
-            </dl>
-          </div>
+            <div data-testid="header-total">
+              <dt className="text-sm text-ink-soft">Total with changes</dt>
+              <dd className={`text-[22px] font-semibold ${totals.hasUnpaid ? "text-mark" : "text-paid"}`}>
+                {formatUsd(totals.totalCents)}
+              </dd>
+              {totals.unpaidCents > 0 && <dd className="text-sm text-ink-soft">{formatUsd(totals.unpaidCents)} not paid yet</dd>}
+            </div>
+          </dl>
         </div>
       </header>
 
@@ -215,7 +237,7 @@ function MarginNote({ quote, reason, order, sendBlockedReason }: MarginNoteProps
     <aside
       id={noteId(order)}
       role="note"
-      className={`margin-note border-l-2 pl-4 ${noteLine[order.status]}`}
+      className={`margin-note scroll-mt-6 border-l-2 pl-4 ${noteLine[order.status]}`}
       data-animate={open}
       data-change-order-id={order.id}
       data-status={order.status}
@@ -252,7 +274,7 @@ function ScopePanel({ data }: ScopePanelProps) {
   const { project, scopeItems, changeOrders, totals } = data;
 
   return (
-    <section aria-labelledby="scope-title" className="rounded-md border border-rule bg-sheet px-5 py-6">
+    <section aria-labelledby="scope-title" className="rounded-md border border-rule bg-sheet px-6 py-6">
       <h2 id="scope-title" className="font-serif text-[22px]">
         Scope
       </h2>
@@ -276,7 +298,7 @@ function ScopePanel({ data }: ScopePanelProps) {
                 <span className={`font-serif ${struck}`}>{o.title}</span>
                 <span className={`tabular-nums ${struck}`}>+{formatUsd(o.amountCents)}</span>
               </div>
-              <p className={`text-sm ${statusColor[o.status]}`}>{statusLine(o)}</p>
+              <p className={`text-sm font-semibold ${statusColor[o.status]}`}>{statusLine(o)}</p>
             </li>
           );
         })}
@@ -293,7 +315,7 @@ function ScopePanel({ data }: ScopePanelProps) {
         </div>
         <div className="flex justify-between border-t border-rule pt-2 text-[18px] font-semibold">
           <dt>Total</dt>
-          <dd>{formatUsd(totals.totalCents)}</dd>
+          <dd className={totals.hasUnpaid ? "text-mark" : "text-paid"}>{formatUsd(totals.totalCents)}</dd>
         </div>
       </dl>
     </section>
@@ -313,7 +335,7 @@ interface ActivityPanelProps {
 // What happened, in order. It only explains: nothing here can start a PayPal call.
 function ActivityPanel({ activity }: ActivityPanelProps) {
   return (
-    <section aria-labelledby="activity-title" className="rounded-md border border-rule bg-sheet px-5 py-6" data-testid="activity-panel">
+    <section aria-labelledby="activity-title" className="rounded-md border border-rule bg-sheet px-6 py-6" data-testid="activity-panel">
       <h2 id="activity-title" className="font-serif text-[22px]">
         Activity
       </h2>
