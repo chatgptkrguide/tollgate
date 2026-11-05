@@ -74,8 +74,10 @@ describe("결제 확인 (Check payment)", () => {
     expect(paypal.calls).toEqual([INVOICE_ID]);
     expect(await order()).toMatchObject({ status: "paid", paidAt: T0.toISOString() });
     expect((await getWorkspace(db, mine))!.totals.paidCents).toBe(paidBefore + 65000);
-    expect(await kinds()).toEqual(["payment_confirmed"]);
-    expect((await listActivity(db, mine)).at(-1)?.detail).toMatchObject({ source: "check", eventId: null, paypalStatus: "PAID" });
+    expect(await kinds()).toEqual(["payment_confirmed", "work_unlocked"]);
+    const [confirmed, unlocked] = (await listActivity(db, mine)).slice(-2);
+    expect(confirmed.detail).toMatchObject({ source: "check", eventId: null, paypalStatus: "PAID" });
+    expect(unlocked).toMatchObject({ kind: "work_unlocked", summary: "Payment unlocked “Loyalty page with customer login”; launch moves to Nov 19." });
   });
 
   it("PayPal이 SENT면 not_paid_yet을 돌려주고 견적과 활동 기록이 그대로다", async () => {
@@ -114,7 +116,7 @@ describe("결제 확인 (Check payment)", () => {
 
     expect(again).toEqual({ ok: true });
     expect(paypal.calls).toHaveLength(1);
-    expect(await kinds()).toEqual(["payment_confirmed"]);
+    expect(await kinds()).toEqual(["payment_confirmed", "work_unlocked"]);
   });
 
   it("웹훅과 결제 확인이 동시에 와도 상태 변화와 payment_confirmed 기록은 한 번이다", async () => {
@@ -138,7 +140,7 @@ describe("결제 확인 (Check payment)", () => {
     expect(webhook).toEqual({ status: 200, outcome: "settled" });
     expect(check).toEqual({ ok: true });
     expect((await order()).status).toBe("paid");
-    expect(await kinds()).toEqual(["payment_confirmed"]);
+    expect(await kinds()).toEqual(["payment_confirmed", "work_unlocked"]);
     expect(await db.query.webhookEvents.findMany()).toMatchObject([{ id: EVENT_ID, outcome: "settled" }]);
   });
 

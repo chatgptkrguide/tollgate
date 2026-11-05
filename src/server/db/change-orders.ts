@@ -1,5 +1,6 @@
 import { and, eq, gte, isNotNull, isNull, lt, notExists, or, sql, type SQL } from "drizzle-orm";
 import type { BillingActionResult } from "../../domain/action-result";
+import type { DeliveryOrder } from "../../domain/delivery";
 import { canTransition } from "../../domain/change-order";
 import type { PaymentOrder } from "../../domain/payment";
 import type { ChangeOrderStatus } from "../../domain/types";
@@ -223,6 +224,25 @@ export async function findOrderByInvoiceId(db: Db, invoiceId: string): Promise<P
 export async function readPayableOrder(db: Db, ownerProjectId: string, changeOrderId: string): Promise<PayableOrder | null> {
   const [row] = await db.select(payableColumns).from(changeOrders).where(owned(ownerProjectId, changeOrderId));
   return row ?? null;
+}
+
+// What a payment's unlock step needs (domain/delivery.ts): the project's agreed launch and every order in it, read
+// together. Null if the project is gone.
+export interface LaunchInputs {
+  agreedLaunch: string;
+  orders: DeliveryOrder[];
+}
+
+export async function readLaunchInputs(db: Db, projectId: string): Promise<LaunchInputs | null> {
+  const [projectRows, orders] = await db.batch([
+    db.select({ dueOn: projects.dueOn }).from(projects).where(eq(projects.id, projectId)),
+    db
+      .select({ id: changeOrders.id, title: changeOrders.title, status: changeOrders.status, extraDays: changeOrders.extraDays, paidAt: changeOrders.paidAt })
+      .from(changeOrders)
+      .where(eq(changeOrders.projectId, projectId)),
+  ]);
+  const [project] = projectRows;
+  return project ? { agreedLaunch: project.dueOn, orders } : null;
 }
 
 // sent → paid for this invoice. paid_at = max(?, sent_at), so the CHECK (paid_at >= sent_at) holds even if the

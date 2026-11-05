@@ -763,8 +763,8 @@ describe("견적 발송·취소·다시 견적", () => {
       expect(result).toEqual({ ok: true });
       expect(await row(draft.id)).toMatchObject({ status: "paid", sendClaimedAt: null, payerViewUrl: PAYER_VIEW_URL });
       expect(paypal.calls.create).toHaveLength(0);
-      expect(await kinds(mine)).toEqual(["invoice_sent", "payment_confirmed"]);
-      expect((await listActivity(db, mine)).at(-1)?.detail).toMatchObject({ source: "send", paypalStatus: "PAID" });
+      expect(await kinds(mine)).toEqual(["invoice_sent", "payment_confirmed", "work_unlocked"]);
+      expect((await listActivity(db, mine)).at(-2)?.detail).toMatchObject({ source: "send", paypalStatus: "PAID" });
     });
 
     it("(PM 결정 D1) 같은 경우 MARKED_AS_PAID여도 paid로 정리된다", async () => {
@@ -805,7 +805,7 @@ describe("견적 발송·취소·다시 견적", () => {
       expect(webhookReply).toEqual({ status: 200, outcome: "settled" });
       expect(result).toEqual({ ok: true });
       expect(await row(draft.id)).toMatchObject({ status: "paid", sendClaimedAt: null });
-      expect(await kinds(mine)).toEqual(["invoice_sent", "payment_confirmed"]);
+      expect(await kinds(mine)).toEqual(["invoice_sent", "payment_confirmed", "work_unlocked"]);
     });
   });
 

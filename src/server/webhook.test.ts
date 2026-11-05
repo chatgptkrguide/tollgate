@@ -145,8 +145,18 @@ describe("PayPal 결제 웹훅", () => {
     expect(reply).toEqual({ status: 200, outcome: "settled" });
     expect(paypal.calls).toEqual([INVOICE_ID]);
     expect(await order()).toMatchObject({ status: "paid", paidAt: RECEIVED.toISOString() });
-    expect(await kinds()).toEqual(["payment_confirmed"]);
-    expect((await listActivity(db, mine)).at(-1)?.detail).toMatchObject({ invoiceId: INVOICE_ID, paypalStatus: "PAID", source: "webhook", eventId: EVENT_ID });
+    expect(await kinds()).toEqual(["payment_confirmed", "work_unlocked"]);
+    const [confirmed, unlocked] = (await listActivity(db, mine)).slice(-2);
+    expect(confirmed.detail).toMatchObject({ invoiceId: INVOICE_ID, paypalStatus: "PAID", source: "webhook", eventId: EVENT_ID });
+    // The seed's launch is Nov 15 and the paid gift card already added a day; the loyalty page adds three more.
+    expect(unlocked).toMatchObject({
+      kind: "work_unlocked",
+      actor: "app",
+      changeOrderId: orderId,
+      summary: "Payment unlocked “Loyalty page with customer login”; launch moves to Nov 19.",
+      detail: { agreedLaunch: "2026-11-15", launch: "2026-11-19", days: 3 },
+      at: RECEIVED.toISOString(),
+    });
     expect(await events()).toEqual([
       { id: EVENT_ID, eventType: "INVOICING.INVOICE.PAID", invoiceId: INVOICE_ID, outcome: "settled", eventCreatedAt: EVENT_TIME.toISOString(), receivedAt: RECEIVED.toISOString(), processedAt: RECEIVED.toISOString() },
     ]);
@@ -252,7 +262,7 @@ describe("PayPal 결제 웹훅", () => {
     expect(recorded).toEqual([]);
     expect(retry).toEqual({ status: 200, outcome: "settled" });
     expect((await order()).status).toBe("paid");
-    expect(await kinds()).toEqual(["payment_confirmed"]);
+    expect(await kinds()).toEqual(["payment_confirmed", "work_unlocked"]);
     expect(await events()).toMatchObject([{ id: EVENT_ID, outcome: "settled" }]);
   });
 
@@ -264,7 +274,7 @@ describe("PayPal 결제 웹훅", () => {
 
     expect(reply).toEqual({ status: 200, outcome: "settled" });
     expect(await order()).toMatchObject({ status: "paid", sentAt: RECEIVED.toISOString(), paidAt: RECEIVED.toISOString(), payerViewUrl: PAYER_VIEW_URL, sendClaimedAt: null });
-    expect(await kinds()).toEqual(["invoice_sent", "payment_confirmed"]);
+    expect(await kinds()).toEqual(["invoice_sent", "payment_confirmed", "work_unlocked"]);
     expect((await listActivity(db, mine)).find((e) => e.kind === "invoice_sent")?.detail).toMatchObject({ recovered: true, invoiceId: INVOICE_ID });
   });
 
@@ -434,7 +444,7 @@ describe("PayPal 결제 웹훅", () => {
     expect(replies).toContainEqual({ status: 200, outcome: "settled" });
     expect(replies).toContainEqual({ status: 200, outcome: "duplicate" });
     expect((await order()).status).toBe("paid");
-    expect(await kinds()).toEqual(["payment_confirmed"]);
+    expect(await kinds()).toEqual(["payment_confirmed", "work_unlocked"]);
     expect(await events()).toHaveLength(1);
   });
 
@@ -691,7 +701,7 @@ describe("PayPal 결제 웹훅", () => {
 
     expect(reply).toEqual({ status: 200, outcome: "settled" });
     expect((await order()).status).toBe("paid");
-    expect((await listActivity(db, mine)).at(-1)).toMatchObject({ kind: "payment_confirmed", detail: { paypalStatus: "MARKED_AS_PAID" } });
+    expect((await listActivity(db, mine)).at(-2)).toMatchObject({ kind: "payment_confirmed", detail: { paypalStatus: "MARKED_AS_PAID" } });
   });
 
   it("취소·무료 처리된 견적의 청구서 이벤트는 PayPal을 부르지 않고 order_closed로 기록한다", async () => {
@@ -735,7 +745,7 @@ describe("PayPal 결제 웹훅", () => {
 
     expect(broken).toEqual({ status: 500, outcome: "server_error" });
     expect(retry).toEqual({ status: 200, outcome: "settled" });
-    expect(await kinds()).toEqual(["payment_confirmed"]);
+    expect(await kinds()).toEqual(["payment_confirmed", "work_unlocked"]);
   });
 });
 

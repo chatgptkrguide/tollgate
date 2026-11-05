@@ -374,7 +374,7 @@ export async function receivePayPalWebhook(deps: WebhookDeps, request: Request):
       console.warn(`paypal webhook ${head.id}: invoice ${invoiceId} reads ${invoice.status}, not paid in full yet; PayPal will retry`);
       return { status: 503, outcome: "payment_awaited", retryAfterSeconds: RETRY_AFTER_SECONDS };
     }
-    if (!(await recorded("settled", invoiceId, settleStatements(db, order, invoice, decision, at, "webhook", head.id)))) return answer("duplicate");
+    if (!(await recorded("settled", invoiceId, await settleStatements(db, order, invoice, decision, at, "webhook", head.id)))) return answer("duplicate");
     return answer(await settledOutcome(db, head.id, invoiceId, order));
   } catch (error) {
     // The database failed: nothing was recorded, so PayPal's retry is handled.

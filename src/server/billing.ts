@@ -252,7 +252,7 @@ export async function sendOwnedChangeOrder(deps: BillingDeps, ownerProjectId: st
       if (invoice) {
         const order = { id: changeOrderId, status: "draft" as const, amountCents: current.amountCents, paypalInvoiceId: invoiceId, projectId: ownerProjectId, sentAt: null };
         const decision = paymentDecision(order, invoice);
-        const [first, ...rest] = settleStatements(db, order, invoice, decision, now().toISOString(), "send");
+        const [first, ...rest] = await settleStatements(db, order, invoice, decision, now().toISOString(), "send");
         if (first) {
           await db.batch([first, ...rest]);
           // This request's draft, or the webhook that got there first: either way the order is paid now.

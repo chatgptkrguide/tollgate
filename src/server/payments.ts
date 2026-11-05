@@ -1,12 +1,13 @@
 import "server-only";
 import type { BatchItem } from "drizzle-orm/batch";
 import type { BillingActionResult } from "@/domain/action-result";
+import { paymentUnlock } from "@/domain/delivery";
 import { invoiceNumberFor } from "@/domain/invoice";
 import { formatUsd } from "@/domain/money";
 import { paymentDecision, paymentPrecheck, type PaymentDecision } from "@/domain/payment";
 import { actionErrorFor, errorDetail, failureSummary, recordFailure } from "./billing-errors";
 import { activityInsertAfterChange } from "./db/activity";
-import { markPaid, markPaidFromDraft, ownedStatus, readPayableOrder, type PayableOrder } from "./db/change-orders";
+import { markPaid, markPaidFromDraft, ownedStatus, readLaunchInputs, readPayableOrder, type PayableOrder } from "./db/change-orders";
 import type { Db } from "./db/client";
 import { PayPalError } from "./paypal/errors";
 import type { InvoiceView } from "./paypal/invoices";
@@ -27,8 +28,11 @@ export interface PaymentDeps {
 
 // The statements that settle an order, for a db.batch(): the UPDATE, then its activity steps, each written only if
 // the statement before it changed a row (activityInsertAfterChange). From a draft: invoice_sent (recovered: true)
-// then payment_confirmed. Empty for any decision but "settle".
-export function settleStatements(
+// then payment_confirmed; then work_unlocked, which says the payment unlocked the order's work and where the launch
+// now lands (domain/delivery.ts). Empty for any decision but "settle".
+// The launch is read just before the batch, so if two orders of one copy settle at the same instant, one line may
+// leave out the other's days; the Delivery panel reads the orders afresh and is always right.
+export async function settleStatements(
   db: Db,
   order: PayableOrder,
   invoice: InvoiceView,
@@ -36,7 +40,7 @@ export function settleStatements(
   at: string,
   source: PaymentSource,
   eventId?: string,
-): BatchItem<"sqlite">[] {
+): Promise<BatchItem<"sqlite">[]> {
   if (decision.kind !== "settle") return [];
   const invoiceId = invoice.id;
   const invoiceNumber = invoice.invoiceNumber ?? invoiceNumberFor(order.id);
@@ -49,7 +53,8 @@ export function settleStatements(
     detail: { invoiceId, paypalStatus: invoice.status, amount: invoice.amountValue, source, eventId: eventId ?? null },
     at,
   });
-  if (decision.from === "sent") return [markPaid(db, order, invoiceId, at), confirmed];
+  const steps = [confirmed, ...(await unlockedStep(db, order, at))];
+  if (decision.from === "sent") return [markPaid(db, order, invoiceId, at), ...steps];
   return [
     markPaidFromDraft(db, order, invoiceId, at, invoice.payerViewUrl),
     activityInsertAfterChange(db, {
@@ -61,7 +66,26 @@ export function settleStatements(
       detail: { invoiceId, paypalStatus: invoice.status, payerViewUrl: invoice.payerViewUrl, recovered: true },
       at,
     }),
-    confirmed,
+    ...steps,
+  ];
+}
+
+// Placed right after payment_confirmed, so it lands only if that step did (changes() then counts that insert): a
+// payment that didn't move the order unlocks nothing. None if the project or the order is gone.
+async function unlockedStep(db: Db, order: PayableOrder, at: string): Promise<BatchItem<"sqlite">[]> {
+  const inputs = await readLaunchInputs(db, order.projectId);
+  const unlock = inputs && paymentUnlock(inputs.agreedLaunch, inputs.orders, order.id, at);
+  if (!inputs || !unlock) return [];
+  return [
+    activityInsertAfterChange(db, {
+      projectId: order.projectId,
+      changeOrderId: order.id,
+      kind: "work_unlocked",
+      actor: "app",
+      summary: unlock.summary,
+      detail: { agreedLaunch: inputs.agreedLaunch, launch: unlock.plan.launch, days: unlock.row.days },
+      at,
+    }),
   ];
 }
 
@@ -98,7 +122,7 @@ export async function checkOwnedPayment(deps: PaymentDeps, ownerProjectId: strin
     console.error(`invoice ${invoice.id} doesn't match its change order's reference, amount or currency; not marked paid`);
     return fail("invoice_changed");
   }
-  const [first, ...rest] = settleStatements(db, order, invoice, decision, now().toISOString(), "check");
+  const [first, ...rest] = await settleStatements(db, order, invoice, decision, now().toISOString(), "check");
   if (!first) return fail("not_paid_yet");
   await db.batch([first, ...rest]);
   // Paid by this batch or by a webhook that got there first; anything else moved the order meanwhile (a cancel).
