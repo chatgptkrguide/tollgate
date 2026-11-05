@@ -254,12 +254,18 @@ html:lang(ja) {
 .perf > span:first-child { left: -9px; }
 .perf > span:last-child { right: -9px; }
 
-/* The stub's lane: a post with its lamp, the striped arm, and the rest it lies on when down */
+/* The stub's lane: a post with its lamp, the striped arm, and the rest it lies on when down. While the gate is up
+   (paid or included) the lane is taller, so the raised arm shows about 140 px of its length above the post instead of
+   a stump; it runs on past the tear line, where the lane clips it. The ticket is already that tall when the lift
+   starts (the server rendered it paid), so nothing moves under the animation. */
 .lane {
   position: relative;
-  height: 88px;
+  height: 96px; /* the stamp sits clear above the lowered arm, whatever its length in each language */
   overflow: hidden;
   border-bottom: 1px solid var(--color-line);
+}
+.ticket[data-gate="up"] .lane {
+  height: 168px;
 }
 .lane-post {
   position: absolute;
@@ -323,6 +329,10 @@ html:lang(ja) {
 .ticket[data-gate="up"] .lane-arm {
   transform: rotate(-80deg);
 }
+/* Up, the stamp sits mid-lane on the right, clear of the arm */
+.ticket[data-gate="up"] .stamp {
+  top: calc(50% - 22px);
+}
 .ticket[data-gate-tone="idle"] .lane-arm {
   border-color: var(--color-idle);
   background: var(--barrier-stripes-idle);
@@ -334,7 +344,7 @@ html:lang(ja) {
 .stamp {
   position: absolute;
   right: 20px;
-  top: 14px;
+  top: 12px;
   border: 2px solid currentColor;
   border-radius: 4px;
   padding: 3px 8px 1px;
@@ -468,12 +478,20 @@ mark.scope-mark {
   72% { transform: rotate(-87deg); }
   100% { transform: rotate(-80deg); }
 }
-.ticket[data-fx="lift"] .lamp,
-.ticket[data-fx="lift"] .lane-post::before {
+/* The lamps hold STOP, then switch at about 300 ms in one step (no muddy STOP-to-GO blend) */
+.ticket[data-fx="lift"] .lamp {
   animation: lamp-switch 700ms linear both;
 }
+.ticket[data-fx="lift"] .lane-post::before {
+  animation: post-lamp-switch 700ms linear both;
+}
 @keyframes lamp-switch {
-  0%, 40% { background-color: var(--color-stop); box-shadow: 0 0 0 3px rgb(217 72 15 / 0.18); }
+  0%, 42% { background-color: var(--color-stop); box-shadow: 0 0 0 3px rgb(217 72 15 / 0.18); }
+  43%, 100% { background-color: var(--lamp); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lamp) 18%, transparent); }
+}
+@keyframes post-lamp-switch {
+  0%, 42% { background-color: var(--color-stop); }
+  43%, 100% { background-color: var(--lamp); }
 }
 .ticket[data-fx="lift"] .stamp {
   animation: stamp-in 950ms var(--ease-out-soft) both;
@@ -544,6 +562,8 @@ mark.scope-mark {
   .scope-mark[data-animate="true"],
   [data-fx],
   [data-fx] *,
+  [data-fx] *::before,
+  [data-fx] *::after,
   .btn-progress::after,
   .scan-line {
     animation: none !important;
