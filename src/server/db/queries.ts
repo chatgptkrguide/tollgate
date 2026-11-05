@@ -1,5 +1,6 @@
 import "server-only";
 import { asc, eq } from "drizzle-orm";
+import { deliveryPlan } from "@/domain/delivery";
 import { displayedOrder, projectTotals, type WorkspaceData } from "@/domain/workspace";
 import type { ChangeOrder, Finding, Message, Project, ScopeItem } from "@/domain/types";
 import type { Db } from "./client";
@@ -100,6 +101,7 @@ export async function getWorkspace(db: Db, projectId: string): Promise<Workspace
     messages: thread,
     changeOrders: orders,
     totals: projectTotals(items, orders),
+    delivery: deliveryPlan(project.dueOn, orders),
   };
 }
 

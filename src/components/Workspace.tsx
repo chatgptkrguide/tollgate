@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ChangeOrderActions } from "@/components/ChangeOrderActions";
 import { Composer } from "@/components/Composer";
+import { DeliveryPanel } from "@/components/DeliveryPanel";
 import { DemoGuide } from "@/components/DemoGuide";
 import { ResetDemo } from "@/components/ResetDemo";
 import type { ActivityActor, ActivityEvent } from "@/domain/activity";
@@ -89,8 +90,12 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-        <section aria-labelledby="thread-title" className="rounded-md border border-rule bg-sheet">
+      {/* Delivery comes first in the page, so on a phone it sits right under the totals; on a wide screen it heads the
+          right column and the conversation spans both rows on the left. */}
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:grid-rows-[auto_1fr] lg:items-start">
+        <DeliveryPanel plan={data.delivery} className="lg:col-start-2 lg:row-start-1" />
+
+        <section aria-labelledby="thread-title" className="rounded-md border border-rule bg-sheet lg:col-start-1 lg:row-span-2 lg:row-start-1">
           <h2 id="thread-title" className="sr-only">
             Conversation with {project.clientName}
           </h2>
@@ -102,7 +107,7 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
           <Composer client={client} blockedReason={reviewBlockedReason} />
         </section>
 
-        <div className="space-y-6">
+        <div className="space-y-6 lg:col-start-2 lg:row-start-2">
           <ScopePanel data={data} />
           <ActivityPanel activity={activity} />
         </div>

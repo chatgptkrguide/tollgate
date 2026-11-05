@@ -31,7 +31,7 @@ describe("납품 일정", () => {
   it("견적이 없으면 출시일은 합의한 날 그대로이고 행이 없다", () => {
     const plan = deliveryPlan(LAUNCH, []);
 
-    expect(plan).toEqual({ agreedLaunch: LAUNCH, launch: LAUNCH, moved: false, rows: [], lockedDays: 0 });
+    expect(plan).toEqual({ agreedLaunch: LAUNCH, launch: LAUNCH, moved: false, rows: [], lockedDays: 0, launchIfPaid: LAUNCH });
   });
 
   it("시드 상태면 결제된 기프트카드 1일만 더해 Nov 16이 되고 초안 로열티 3일은 잠긴 채 세지 않는다", () => {
@@ -40,6 +40,7 @@ describe("납품 일정", () => {
     expect(plan.launch).toBe("2026-11-16");
     expect(plan.moved).toBe(true);
     expect(plan.lockedDays).toBe(3);
+    expect(plan.launchIfPaid).toBe("2026-11-19");
     expect(plan.rows).toEqual([
       { orderId: "gift", title: "gift page", days: 1, state: "unlocked", unlockedAt: "2026-10-26T10:00:00Z" },
       { orderId: "loyalty", title: "loyalty page", days: 3, state: "locked", unlockedAt: null },

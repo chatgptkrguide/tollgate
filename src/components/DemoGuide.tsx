@@ -37,8 +37,8 @@ export function DemoGuide({ client }: DemoGuideProps) {
             times those hours. Nothing is sent yet.
           </Step>
           <Step n={3}>
-            Press <b>Send change order</b> to send a PayPal sandbox invoice. When the client pays it, the total turns
-            green.
+            Press <b>Send change order</b> to send a PayPal sandbox invoice. When the client pays it, the work unlocks,
+            the launch moves, and the total turns green.
           </Step>
         </ol>
         <p className="mt-3 text-xs text-ink-soft">

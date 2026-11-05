@@ -24,6 +24,7 @@ export interface DeliveryPlan {
   moved: boolean; // launch !== agreedLaunch
   rows: readonly DeliveryRow[]; // in the order given, cancelled left out
   lockedDays: number; // days the locked rows would add once paid
+  launchIfPaid: string; // launch once every locked row is paid too
 }
 
 // Days are counted whole: a fraction rounds up (half a day still takes the day), anything not above zero adds none.
@@ -71,12 +72,14 @@ export function deliveryPlan(agreedLaunch: string, orders: readonly DeliveryOrde
   }
   const sumDays = (picked: readonly DeliveryRow[]) => picked.reduce((sum, row) => sum + row.days, 0);
   const launch = addDays(agreedLaunch, sumDays(rows.filter((row) => row.state !== "locked")));
+  const lockedDays = sumDays(rows.filter((row) => row.state === "locked"));
   return {
     agreedLaunch,
     launch,
     moved: launch !== agreedLaunch,
     rows,
-    lockedDays: sumDays(rows.filter((row) => row.state === "locked")),
+    lockedDays,
+    launchIfPaid: addDays(launch, lockedDays),
   };
 }
 

@@ -1,4 +1,5 @@
 import { isBillable, isUnpaid } from "./change-order";
+import type { DeliveryPlan } from "./delivery";
 import { sumCents } from "./money";
 import type { ChangeOrder, Finding, Message, Project, ScopeItem } from "./types";
 
@@ -27,6 +28,7 @@ export interface WorkspaceData {
   messages: readonly ThreadMessage[]; // by sentAt
   changeOrders: readonly ChangeOrder[]; // by message sentAt, then quoteStart; every status
   totals: ProjectTotals;
+  delivery: DeliveryPlan; // the agreed launch and how paid change orders moved it
 }
 
 export function projectTotals(
