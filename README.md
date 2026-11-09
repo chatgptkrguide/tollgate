@@ -38,7 +38,7 @@ Languages: the screen reads in English, Korean, Japanese, Spanish or Portuguese 
 
 ## Try it
 
-**Testing for judges:** everything below runs on the live demo with no sign-up, in the same order as the demo video. The only private detail, a PayPal sandbox buyer login for step 4, is in the testing-instructions field of our Devpost submission; any PayPal sandbox personal account you already have works too.
+**Testing for judges:** everything below runs on the live demo with no sign-up, in the same order as the demo video. The only private detail, a PayPal sandbox buyer login for step 4, is in the testing-instructions field of our Devpost submission.
 
 1. Open the [live demo](https://tollgate-ratq.onrender.com). Each visitor gets a private sandbox copy of a demo project, so you can't break anyone else's. **Reset demo** puts your copy back. If too many new demos were started recently (10 from one address in an hour, or 500 on the server in a day), a new visitor sees the demo read-only and nothing is saved until then.
 2. **Claude checks a message.** Paste a new client message into the message box (or press **Use a sample message**), then press **Check scope**. Claude marks the phrases the agreed scope doesn't cover and prints a ticket with its hours; the app prices it from the hourly rate. Nothing is sent yet. Each copy can run 10 checks a day.
