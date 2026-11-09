@@ -2,11 +2,11 @@
 
 Catch scope creep in client messages and bill it with a PayPal invoice before you do the extra work.
 
-Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (2026).
-
 **Live demo:** https://tollgate-ratq.onrender.com (PayPal sandbox only)
 
 The demo runs on a free server that sleeps after 15 idle minutes. The first visit can take about one minute to wake it; after that it is fast.
+
+Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (2026).
 
 ![Tollgate workspace: the client conversation with a marked request, its change order as a toll ticket, and the total with what is not paid yet](docs/images/screen-ticket-desktop.png)
 
@@ -36,7 +36,7 @@ Languages: the screen reads in English, Korean, Japanese, Spanish or Portuguese 
 
 ## Try it
 
-1. Open the [live demo](https://tollgate-ratq.onrender.com). Each visitor gets a private sandbox copy of a demo project, so you can't break anyone else's. **Reset demo** puts your copy back.
+1. Open the [live demo](https://tollgate-ratq.onrender.com). Each visitor gets a private sandbox copy of a demo project, so you can't break anyone else's. **Reset demo** puts your copy back. If too many new demos were started recently (10 from one address in an hour, or 500 on the server in a day), a new visitor sees the demo read-only and nothing is saved until then.
 2. Open the change order for the loyalty page and press **Send change order**. Tollgate creates and sends a PayPal sandbox invoice. One copy can send up to 20 invoices per 24 hours.
 3. Pay it as the client. Use the invoice's payer link and sign in with a PayPal sandbox personal (buyer) account. The credentials are in the private testing-instructions field of our Devpost submission; they are not in this repository.
 4. Return to Tollgate. The change order shows **Paid** and the total turns green. If the webhook is late, press **Check payment**.
