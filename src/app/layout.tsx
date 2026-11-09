@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     "Catch scope creep in client messages and bill it with PayPal before you do the extra work.",
 };
 
-// The static shell says English; DocumentLang corrects it to the request's language (cookie, then Accept-Language).
+// The static shell says English; DocumentLang corrects it to the request's language (the visitor's choice, else English).
 // suppressHydrationWarning: the attribute it changes before React hydrates.
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

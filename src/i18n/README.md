@@ -12,7 +12,7 @@ is in `docs/ARCHITECTURE.md` §12.
 | `messages/en.ts` | The English catalog, the source of every key. `ko.ts`, `ja.ts`, `es.ts`, `pt.ts` mirror it |
 | `t.ts` | `t(locale, key, params)`, `tCount(locale, base, count, params)`, `tRich(locale, key, params)` |
 | `format.ts` | `formatMoney(locale, cents)`, `formatNumber(locale, n)`, `formatDate(locale, iso)`; in `en` they print exactly what `formatUsd` and `formatShortDate` print |
-| `server.ts` | `getLocale()`: cookie `tg_locale`, else `Accept-Language`, else `en` (server only; reads the request, so call it inside a `<Suspense>`) |
+| `server.ts` | `getLocale()`: cookie `tg_locale`, else `en`; English by default, whatever the browser's `Accept-Language` says (server only; reads the request, so call it inside a `<Suspense>`) |
 | `actions.ts` | `setLocale(locale)` server action: validates and sets the cookie for a year |
 | `LocaleSwitcher.tsx` | `<LocaleSwitcher locale={locale} label={t(locale, "localeSwitcher.label")} />` |
 | `invoice.ts` | `invoiceTexts(locale, …)`: the PayPal invoice description and note (already used by `server/billing.ts`) |
@@ -74,9 +74,9 @@ summaries (stored English text written by the server). Product names (Tollgate, 
 | App bar | `LocaleSwitcher` in `#locale-slot`, next to Reset demo | `localeSwitcher.label` |
 | Project header (`ClientLocaleSelect`) | a client language `<select>` calling `setClientLocale(project.id, value)`, with its label and help, and `clientLocale.saveFailed` on a failed answer | `clientLocale.*` |
 
-The browser tests read English (the default for a browser without a `tg_locale` cookie whose `Accept-Language` is
-English). `e2e/i18n.spec.ts` picks 한국어 in the switcher and sees `범위 확인`, and sets the client language; a PayPal-run
-test that checks the invoice body in another language is still to write.
+The browser tests read English (the default for any visitor without a `tg_locale` cookie). `e2e/i18n.spec.ts` checks
+that a Korean browser still opens in English, picks 한국어 in the switcher and sees `범위 확인`, and sets the client
+language; a PayPal-run test that checks the invoice body in another language is still to write.
 
 ## Adding or changing a text
 

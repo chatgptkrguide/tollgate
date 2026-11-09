@@ -32,7 +32,7 @@ The agent proposes; nothing is billed until you approve it. Every step Claude an
 
 Extra work stays locked until it is paid: the Delivery panel shows each change order as locked (striped, orange-red) or unlocked (green), and the launch date only moves for work the client has paid for or that you chose to include for free.
 
-Languages: the screen reads in English, Korean, Japanese, Spanish or Portuguese (the browser's language, or the picker in the top bar), and each project has a client language that new PayPal invoices are written in. Amounts stay in USD; the client's messages stay as they were written.
+Languages: the screen reads in English, Korean, Japanese, Spanish or Portuguese (English by default; pick another in the top bar), and each project has a client language that new PayPal invoices are written in. Amounts stay in USD; the client's messages stay as they were written.
 
 ## Try it
 
