@@ -1,6 +1,6 @@
 # Languages: wiring guide
 
-The components in `src/components/` are switched over (`wp/i18n-wire`): `page.tsx` reads the locale and passes it down,
+The components in `src/components/` are switched over: `page.tsx` reads the locale and passes it down,
 and every interface text goes through the catalogs. This page says how that works, for the next text you add. The design
 is in `docs/ARCHITECTURE.md` §12.
 
