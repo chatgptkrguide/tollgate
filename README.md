@@ -27,7 +27,7 @@ These studies measure unpaid and late payment in general. They do not measure sc
 1. Paste a new client message into the project.
 2. Claude compares it with the agreed scope and marks the phrases that add work. It estimates the hours. The price is hours x your hourly rate, computed by the app.
 3. You review the marks and send a change order. Tollgate creates and sends a PayPal invoice for it.
-4. When the client pays, a PayPal webhook marks the change order as paid and the project total turns green.
+4. When the client pays, a PayPal webhook marks the change order as paid; the project total turns green once nothing is left unpaid.
 5. The payment unlocks the extra work in your delivery plan: the Delivery panel schedules it and moves the launch date by the work's estimated days.
 
 The agent proposes; nothing is billed until you approve it. Every step Claude and the app take is written to an activity panel next to the workspace, including what was sent to PayPal.
