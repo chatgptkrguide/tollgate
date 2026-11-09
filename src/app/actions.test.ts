@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoiceNumberFor } from "@/domain/invoice";
 import type { InvoiceGateway } from "@/server/billing";
 import { createDb, type Db } from "@/server/db/client";
-import { ensureDemoCopy } from "@/server/db/demo";
+import { ensureDemoCopy, projectIdForVisitor } from "@/server/db/demo";
 import { runMigrations } from "@/server/db/migrate";
 import { changeOrders, projects } from "@/server/db/schema";
 import { PayPalError } from "@/server/paypal/errors";
@@ -192,6 +192,19 @@ describe("서버 액션: 무료 처리와 데모 재설정", () => {
     expect(result).toEqual({ ok: false, error: "not_found" });
     expect(await db.select().from(projects)).toEqual(before);
     expect([await ordersOf(mine), await ordersOf(theirs)]).toEqual(ordersBefore);
+  });
+
+  it("사본이 없는 방문자(읽기 전용 미리보기)가 자기 id로 재설정해도 not_found이고 사본을 만들지 않는다", async () => {
+    const previewVisitor = newVisitorId();
+    signIn(previewVisitor);
+    vi.mocked(refresh).mockClear();
+    const before = await db.select().from(projects);
+
+    const result = await resetDemo(null, form({ projectId: projectIdForVisitor(previewVisitor) }));
+
+    expect(result).toEqual({ ok: false, error: "not_found" });
+    expect(await db.select().from(projects)).toEqual(before);
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("형식이 틀린 프로젝트 id로 재설정하면 invalid_input이다", async () => {

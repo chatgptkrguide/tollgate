@@ -223,6 +223,13 @@ export async function countCopiesCreatedSince(db: Db, since: Date): Promise<numb
   return copies;
 }
 
+// Whether the copy exists. The reset action asks first: resetDemoCopy also writes a copy that isn't there, so a
+// visitor shown the read-only preview (no copy, a new one refused) could otherwise get one past the limits.
+export async function demoCopyExists(db: Db, projectId: string): Promise<boolean> {
+  const [row] = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, projectId)).limit(1);
+  return row !== undefined;
+}
+
 // Puts the copy back to the seed in one batch: same project id, fresh child ids, created and last seen now.
 // Refused ("invoice_open", nothing changed) while the copy has an order with an invoice the client may still pay.
 // The open invoice is looked up first, so the usual refusal never depends on how the database reports an error

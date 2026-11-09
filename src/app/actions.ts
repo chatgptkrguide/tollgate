@@ -9,7 +9,7 @@ import { waiveOwnedChangeOrder } from "@/server/db/change-orders";
 import { checkOwnedPayment } from "@/server/payments";
 import { getDb } from "@/server/db/client";
 import { updateClientLocale } from "@/server/db/client-locale";
-import { resetDemoCopy } from "@/server/db/demo";
+import { demoCopyExists, resetDemoCopy } from "@/server/db/demo";
 import { liveReviewDeps, reviewOwnedMessage } from "@/server/review";
 import { currentProjectId } from "@/server/session";
 
@@ -50,14 +50,17 @@ export async function resetDemo(_prev: ResetActionResult | null, formData: FormD
   // Someone else's copy and a copy that doesn't exist answer the same way.
   if (projectId.data !== (await currentProjectId())) return { ok: false, error: "not_found" };
 
-  let outcome: "reset" | "invoice_open";
+  let outcome: "reset" | "invoice_open" | "missing";
   try {
-    outcome = await resetDemoCopy(getDb(), projectId.data, new Date());
+    // The visitor's own id with no copy behind it: the read-only preview, whose new copy was refused (demo-limit.ts).
+    const db = getDb();
+    outcome = (await demoCopyExists(db, projectId.data)) ? await resetDemoCopy(db, projectId.data, new Date()) : "missing";
   } catch (error) {
     // The reset is one batch, so a failure leaves the copy exactly as it was.
     console.error("resetting the demo copy failed", error);
     return { ok: false, error: "server_error" };
   }
+  if (outcome === "missing") return { ok: false, error: "not_found" };
   refresh();
   return outcome === "reset" ? { ok: true } : { ok: false, error: "invoice_open" };
 }
