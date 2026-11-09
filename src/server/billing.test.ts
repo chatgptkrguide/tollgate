@@ -1,7 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoiceNumberFor } from "@/domain/invoice";
-import { createSendLog, type SendLog } from "@/domain/send-limit";
 import {
   cancelOwnedChangeOrder,
   invoiceGateway,
@@ -16,12 +15,15 @@ import { waiveOwnedChangeOrder } from "./db/change-orders";
 import { createDb, type Db } from "./db/client";
 import { ensureDemoCopy, resetDemoCopy } from "./db/demo";
 import { runMigrations } from "./db/migrate";
-import { activityEvents, changeOrders, projects } from "./db/schema";
+import { activityEvents, changeOrders, paypalSends, projects } from "./db/schema";
 import { parseEnv } from "./env";
 import { PayPalError } from "./paypal/errors";
 import {
   INVOICE_ID,
   PAYER_VIEW_URL,
+  WEBHOOK_ID,
+  paidEvent,
+  signatureHeaders,
   cancelledInvoice,
   createdDraft,
   duplicateInvoiceNumber,
@@ -35,6 +37,7 @@ import {
 } from "../../test/paypal-fixtures";
 import type { InvoiceInput, InvoiceView } from "./paypal/invoices";
 import { createPayPalClient, paypalConfig } from "./paypal/token";
+import { receivePayPalWebhook } from "./webhook";
 
 const T0 = new Date("2026-11-01T09:00:00.000Z");
 
@@ -60,6 +63,7 @@ const sentView = (id: string, changeOrderId: string): InvoiceView => ({
   invoiceNumber: invoiceNumberFor(changeOrderId),
   reference: changeOrderId,
   amountValue: "650.00",
+  currencyCode: "USD",
   payerViewUrl: PAYER_VIEW_URL,
 });
 
@@ -102,7 +106,6 @@ describe("견적 발송·취소·다시 견적", () => {
   let mine: string;
   let theirs: string;
   let clock: ReturnType<typeof steppingClock>;
-  let sendLog: SendLog;
 
   beforeEach(async () => {
     db = createDb(":memory:");
@@ -110,11 +113,10 @@ describe("견적 발송·취소·다시 견적", () => {
     mine = (await ensureDemoCopy(db, "visitor-a", T0)).projectId;
     theirs = (await ensureDemoCopy(db, "visitor-b", T0)).projectId;
     clock = steppingClock();
-    sendLog = createSendLog();
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  const deps = (paypal: InvoiceGateway | null): BillingDeps => ({ db, paypal, now: clock.now, sendLog });
+  const deps = (paypal: InvoiceGateway | null): BillingDeps => ({ db, paypal, now: clock.now });
   const orderOf = async (projectId: string, status: "draft" | "paid") =>
     (await db.select().from(changeOrders).where(and(eq(changeOrders.projectId, projectId), eq(changeOrders.status, status))))[0];
   const row = async (id: string) => (await db.select().from(changeOrders).where(eq(changeOrders.id, id)))[0];
@@ -469,6 +471,35 @@ describe("견적 발송·취소·다시 견적", () => {
       expect(paypal.calls.create[0].description).toBe("Estimated 12.5 h at $50/h, rounded up to the next $10");
     });
 
+    it("프로젝트의 고객 언어가 ko면 항목 설명과 메모를 한국어로 쓰고, 금액·제목·수신인은 그대로다", async () => {
+      const draft = await orderOf(mine, "draft");
+      await db.update(projects).set({ clientLocale: "ko" }).where(eq(projects.id, mine));
+      const paypal = fakeGateway();
+
+      await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id);
+
+      expect(paypal.calls.create[0]).toEqual({
+        changeOrderId: draft.id,
+        title: "Loyalty page with customer login",
+        description: "예상 작업 13시간 × 시간당 US$50",
+        note: "Online ordering site 관련 추가 작업 청구서입니다. 처음 합의한 작업 범위에 포함되지 않은 항목입니다.",
+        amountCents: 65000,
+        recipient: { email: "maya@harborandpine.example", businessName: "Harbor & Pine Coffee" },
+      });
+    });
+
+    it("고객 언어가 ja이고 올림이 있으면 일본어 설명에 올림 단위를 적는다", async () => {
+      const draft = await orderOf(mine, "draft");
+      await db.update(projects).set({ clientLocale: "ja" }).where(eq(projects.id, mine));
+      await db.update(changeOrders).set({ hours: 12.5, amountCents: 63000 }).where(eq(changeOrders.id, draft.id));
+      const paypal = fakeGateway();
+
+      await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id);
+
+      expect(paypal.calls.create[0].description).toBe("見積作業時間 12.5 時間 × 時給 $50（$10 単位で切り上げ）");
+      expect(paypal.calls.create[0].amountCents).toBe(63000);
+    });
+
     it("작성 뒤 id를 저장하지 못한 견적을 다시 발송하면 번호로 같은 청구서를 찾아 쓰고 reused true로 남긴다", async () => {
       const draft = await orderOf(mine, "draft");
       const earlier = { ...createdDraft, detail: { ...createdDraft.detail, reference: draft.id, invoice_number: invoiceNumberFor(draft.id) } };
@@ -575,14 +606,17 @@ describe("견적 발송·취소·다시 견적", () => {
       expect(await sendOwnedChangeOrder(deps(paypal.gateway), last.projectId, last.draftId)).toEqual({ ok: true });
     });
 
-    it("발송·재설정을 반복해 활동 기록을 지워도 같은 서버 프로세스에서는 상한이 유지된다", async () => {
+    it("발송·취소·재설정을 반복해 활동 기록을 지워도 발송 기록 표로 상한이 유지된다 (P2-S1b)", async () => {
       const paypal = manyInvoices();
       const results = [];
 
       for (let i = 0; i < 11; i++) {
         const draft = await orderOf(mine, "draft");
         results.push(await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id));
-        await resetDemoCopy(db, mine, clock.now()); // deletes this copy's activity rows and gives it a new draft id
+        // A sent invoice blocks the reset, so it is cancelled first.
+        if ((await row(draft.id))?.status === "sent") await cancelOwnedChangeOrder(deps(paypal.gateway), mine, draft.id);
+        // Deletes this copy's activity rows and gives it a new draft id.
+        expect(await resetDemoCopy(db, mine, clock.now())).toBe("reset");
       }
 
       expect(await db.select().from(activityEvents)).toEqual([]);
@@ -591,14 +625,14 @@ describe("견적 발송·취소·다시 견적", () => {
       expect(paypal.calls.create).toHaveLength(10);
     });
 
-    it("서버 프로세스가 다시 시작돼도(새 로그) DB의 발송 기록으로 상한이 유지된다", async () => {
+    it("발송 기록 표는 PayPal을 부른 발송마다 한 줄이고 거부된 발송은 남기지 않는다", async () => {
       const copies = await draftsOfNewCopies(11);
       const paypal = manyInvoices();
-      for (const { projectId, draftId } of copies.slice(0, 10)) await sendOwnedChangeOrder(deps(paypal.gateway), projectId, draftId);
-      sendLog = createSendLog(); // the restarted process remembers nothing
-      const [last] = copies.slice(10);
 
-      expect(await sendOwnedChangeOrder(deps(paypal.gateway), last.projectId, last.draftId)).toEqual({ ok: false, error: "rate_limited" });
+      for (const { projectId, draftId } of copies) await sendOwnedChangeOrder(deps(paypal.gateway), projectId, draftId);
+
+      const rows = await db.select().from(paypalSends);
+      expect(rows.map((r) => r.changeOrderId)).toEqual(copies.slice(0, 10).map((c) => c.draftId));
     });
 
     it("상한 안의 요청끼리 동시에 보내도 마지막 한 자리는 하나만 가져간다", async () => {
@@ -610,6 +644,58 @@ describe("견적 발송·취소·다시 견적", () => {
 
       expect(results.filter((r) => r.ok)).toHaveLength(1);
       expect(results.filter((r) => !r.ok)).toEqual(Array(2).fill({ ok: false, error: "rate_limited" }));
+    });
+
+    describe("사본별 발송 상한 (P2-S5)", () => {
+      // Sends, cancels and resets my copy n times, 15 seconds apart so the server's per-minute cap never answers.
+      async function sendCancelResetLoop(paypal: InvoiceGateway, n: number) {
+        const results = [];
+        for (let i = 0; i < n; i++) {
+          clock.set(new Date(T0.getTime() + i * 15 * 1000));
+          const draft = await orderOf(mine, "draft");
+          results.push(await sendOwnedChangeOrder(deps(paypal), mine, draft.id));
+          if ((await row(draft.id))?.status === "sent") await cancelOwnedChangeOrder(deps(paypal), mine, draft.id);
+          expect(await resetDemoCopy(db, mine, clock.now())).toBe("reset");
+        }
+        return results;
+      }
+
+      it("한 사본의 21번째 발송은 PayPal을 부르지 않고 copy_rate_limited이며, 다른 사본은 그때도 보낼 수 있다", async () => {
+        const paypal = manyInvoices();
+        const results = await sendCancelResetLoop(paypal.gateway, 20);
+        const draft = await orderOf(mine, "draft");
+        const createsBefore = paypal.calls.create.length;
+
+        const refused = await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id);
+        const other = await sendOwnedChangeOrder(deps(paypal.gateway), theirs, (await orderOf(theirs, "draft")).id);
+
+        expect(results).toEqual(Array(20).fill({ ok: true }));
+        expect(refused).toEqual({ ok: false, error: "copy_rate_limited" });
+        expect(paypal.calls.create).toHaveLength(createsBefore + 1); // only the other copy's invoice
+        expect(await row(draft.id)).toMatchObject({ status: "draft", sendClaimedAt: null, paypalInvoiceId: null });
+        expect(other).toEqual({ ok: true });
+      });
+
+      it("재설정해도 사본의 발송 상한은 돌아오지 않는다", async () => {
+        const paypal = manyInvoices();
+        await sendCancelResetLoop(paypal.gateway, 20);
+
+        expect(await resetDemoCopy(db, mine, clock.now())).toBe("reset");
+        const afterReset = await sendOwnedChangeOrder(deps(paypal.gateway), mine, (await orderOf(mine, "draft")).id);
+
+        expect(afterReset).toEqual({ ok: false, error: "copy_rate_limited" });
+        expect(paypal.calls.create).toHaveLength(20);
+      });
+
+      it("사본에 여유가 있어도 서버 상한에 걸리면 rate_limited 그대로다", async () => {
+        const copies = await draftsOfNewCopies(10);
+        const paypal = manyInvoices();
+        for (const { projectId, draftId } of copies) await sendOwnedChangeOrder(deps(paypal.gateway), projectId, draftId);
+
+        const refused = await sendOwnedChangeOrder(deps(paypal.gateway), mine, (await orderOf(mine, "draft")).id);
+
+        expect(refused).toEqual({ ok: false, error: "rate_limited" });
+      });
     });
   });
 
@@ -686,6 +772,69 @@ describe("견적 발송·취소·다시 견적", () => {
 
       expect(results).toEqual(Array(2).fill({ ok: false, error: "paypal_rejected" }));
       expect(await row(draft.id)).toMatchObject({ status: "draft", paypalInvoiceId: INVOICE_ID, sendClaimedAt: null });
+    });
+  });
+
+  describe("이미 결제된 청구서를 가진 draft (P2-D7)", () => {
+    const refuseSend = async () => Promise.reject(new PayPalError("rejected", 422, "CANNOT_SEND_INVOICE", null));
+    async function draftHoldingInvoice() {
+      const draft = await orderOf(mine, "draft");
+      await db.update(changeOrders).set({ paypalInvoiceId: INVOICE_ID }).where(eq(changeOrders.id, draft.id));
+      return draft;
+    }
+
+    it("청구서 id를 가진 draft를 다시 보낼 때 PayPal이 이미 PAID라 발송이 거절되면 paid로 정리된다", async () => {
+      const draft = await draftHoldingInvoice();
+      const paypal = fakeGateway({ send: refuseSend, get: async (id) => ({ ...sentView(id, draft.id), status: "PAID" }) });
+
+      const result = await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id);
+
+      expect(result).toEqual({ ok: true });
+      expect(await row(draft.id)).toMatchObject({ status: "paid", sendClaimedAt: null, payerViewUrl: PAYER_VIEW_URL });
+      expect(paypal.calls.create).toHaveLength(0);
+      expect(await kinds(mine)).toEqual(["invoice_sent", "payment_confirmed", "work_unlocked"]);
+      expect((await listActivity(db, mine)).at(-2)?.detail).toMatchObject({ source: "send", paypalStatus: "PAID" });
+    });
+
+    it("(PM 결정 D1) 같은 경우 MARKED_AS_PAID여도 paid로 정리된다", async () => {
+      const draft = await draftHoldingInvoice();
+      const paypal = fakeGateway({ send: refuseSend, get: async (id) => ({ ...sentView(id, draft.id), status: "MARKED_AS_PAID" }) });
+
+      expect(await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id)).toEqual({ ok: true });
+      expect((await row(draft.id)).status).toBe("paid");
+    });
+
+    it("발송이 거절됐고 PayPal이 PAID인데 금액이 다르면 정리하지 않고 paypal_rejected이며 draft 그대로다", async () => {
+      const draft = await draftHoldingInvoice();
+      const paypal = fakeGateway({ send: refuseSend, get: async (id) => ({ ...sentView(id, draft.id), status: "PAID", amountValue: "600.00" }) });
+
+      expect(await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id)).toEqual({ ok: false, error: "paypal_rejected" });
+      expect(await row(draft.id)).toMatchObject({ status: "draft", paypalInvoiceId: INVOICE_ID, sendClaimedAt: null });
+    });
+
+    it("발송 중에 웹훅이 draft를 paid로 바꾸면 발송 요청은 성공으로 끝나고 상태는 paid다", async () => {
+      const draft = await draftHoldingInvoice();
+      const paidView = async (id: string) => ({ ...sentView(id, draft.id), status: "PAID" });
+      const webhookPayPal = fakeGateway({ get: paidView });
+      const verifier = { verify: async () => "verified" as const };
+      const event = new Request("https://tollgate.example/api/webhooks/paypal", { method: "POST", body: JSON.stringify(paidEvent(INVOICE_ID, draft.id)), headers: signatureHeaders });
+      let webhookReply: unknown;
+      const paypal = fakeGateway({
+        send: async () => {
+          // The client pays and the webhook lands while PayPal is still answering this send.
+          vi.spyOn(console, "log").mockImplementation(() => {});
+          webhookReply = await receivePayPalWebhook({ db, paypal: webhookPayPal.gateway, verifier, webhookId: WEBHOOK_ID, now: clock.now }, event);
+          return "sent";
+        },
+        get: paidView,
+      });
+
+      const result = await sendOwnedChangeOrder(deps(paypal.gateway), mine, draft.id);
+
+      expect(webhookReply).toEqual({ status: 200, outcome: "settled" });
+      expect(result).toEqual({ ok: true });
+      expect(await row(draft.id)).toMatchObject({ status: "paid", sendClaimedAt: null });
+      expect(await kinds(mine)).toEqual(["invoice_sent", "payment_confirmed", "work_unlocked"]);
     });
   });
 

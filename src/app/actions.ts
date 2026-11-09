@@ -2,11 +2,15 @@
 
 import { refresh } from "next/cache";
 import { z } from "zod";
-import type { ActionResult, BillingActionResult } from "@/domain/action-result";
+import type { ActionResult, BillingActionResult, ResetActionResult, ReviewActionResult } from "@/domain/action-result";
+import { LOCALES } from "@/i18n/locales";
 import { cancelOwnedChangeOrder, liveBillingDeps, requoteOwnedChangeOrder, sendOwnedChangeOrder } from "@/server/billing";
 import { waiveOwnedChangeOrder } from "@/server/db/change-orders";
+import { checkOwnedPayment } from "@/server/payments";
 import { getDb } from "@/server/db/client";
-import { resetDemoCopy } from "@/server/db/demo";
+import { updateClientLocale } from "@/server/db/client-locale";
+import { demoCopyExists, resetDemoCopy } from "@/server/db/demo";
+import { liveReviewDeps, reviewOwnedMessage } from "@/server/review";
 import { currentProjectId } from "@/server/session";
 
 // Anyone can POST to these, so each one reads only the id it needs, checks it, and takes the owner
@@ -15,6 +19,7 @@ import { currentProjectId } from "@/server/session";
 
 const changeOrderIdSchema = z.uuid();
 const demoProjectIdSchema = z.string().regex(/^v_[A-Za-z0-9_-]{22}$/);
+const localeSchema = z.enum(LOCALES);
 
 // A draft that already has a PayPal invoice is refused (invoice_exists); the page is refreshed then too, so the
 // note shows "Send again" in place of the stale waive button.
@@ -36,22 +41,28 @@ export async function waiveChangeOrder(_prev: BillingActionResult | null, formDa
   return result;
 }
 
-export async function resetDemo(_prev: ActionResult | null, formData: FormData): Promise<ActionResult> {
+// Refused with invoice_open while a change order has an invoice the client may still pay: deleting that order would
+// leave a payment the webhook can't record. The page is refreshed then too, so it shows the order as it is now.
+export async function resetDemo(_prev: ResetActionResult | null, formData: FormData): Promise<ResetActionResult> {
   const projectId = demoProjectIdSchema.safeParse(formData.get("projectId"));
   if (!projectId.success) return { ok: false, error: "invalid_input" };
 
   // Someone else's copy and a copy that doesn't exist answer the same way.
   if (projectId.data !== (await currentProjectId())) return { ok: false, error: "not_found" };
 
+  let outcome: "reset" | "invoice_open" | "missing";
   try {
-    await resetDemoCopy(getDb(), projectId.data, new Date());
+    // The visitor's own id with no copy behind it: the read-only preview, whose new copy was refused (demo-limit.ts).
+    const db = getDb();
+    outcome = (await demoCopyExists(db, projectId.data)) ? await resetDemoCopy(db, projectId.data, new Date()) : "missing";
   } catch (error) {
     // The reset is one batch, so a failure leaves the copy exactly as it was.
     console.error("resetting the demo copy failed", error);
     return { ok: false, error: "server_error" };
   }
+  if (outcome === "missing") return { ok: false, error: "not_found" };
   refresh();
-  return { ok: true };
+  return outcome === "reset" ? { ok: true } : { ok: false, error: "invoice_open" };
 }
 
 // Sends the change order as a PayPal invoice. The form carries only the id: amount, client and invoice come
@@ -112,4 +123,67 @@ export async function requoteChangeOrder(_prev: ActionResult | null, formData: F
   }
   if (result.ok) refresh();
   return result;
+}
+
+// Reads the invoice from PayPal and marks the order paid if PayPal says so. Refreshes the page when it is paid.
+export async function checkPayment(_prev: BillingActionResult | null, formData: FormData): Promise<BillingActionResult> {
+  const changeOrderId = changeOrderIdSchema.safeParse(formData.get("changeOrderId"));
+  if (!changeOrderId.success) return { ok: false, error: "invalid_input" };
+
+  const ownerProjectId = await currentProjectId();
+  if (!ownerProjectId) return { ok: false, error: "not_found" };
+
+  let result: BillingActionResult;
+  try {
+    result = await checkOwnedPayment(liveBillingDeps(), ownerProjectId, changeOrderId.data);
+  } catch (error) {
+    console.error("checking a payment failed", error);
+    return { ok: false, error: "server_error" };
+  }
+  if (result.ok) refresh();
+  return result;
+}
+
+// Sends a pasted client message to Claude and stores what it marks as draft change orders. The form carries only the
+// text: the project comes from the cookie, the prices from its rate. A failed review also refreshes the page, so the
+// activity panel shows it.
+export async function reviewMessage(_prev: ReviewActionResult | null, formData: FormData): Promise<ReviewActionResult> {
+  const message = formData.get("message");
+  if (typeof message !== "string") return { ok: false, error: "invalid_input" };
+
+  const ownerProjectId = await currentProjectId();
+  if (!ownerProjectId) return { ok: false, error: "not_found" };
+
+  let result: ReviewActionResult;
+  try {
+    result = await reviewOwnedMessage(liveReviewDeps(), ownerProjectId, message);
+  } catch (error) {
+    console.error("reviewing a message failed", error);
+    return { ok: false, error: "server_error" };
+  }
+  if (result.ok || result.error === "claude_unavailable" || result.error === "claude_refused") refresh();
+  return result;
+}
+
+// Sets the language the client reads, which the next PayPal invoice for this copy is written in (description and note;
+// the amount stays USD). Called directly with two arguments, not from a form. Only the visitor's own copy can be
+// changed: someone else's copy and one that doesn't exist answer the same way. An invoice PayPal already has keeps its
+// words; only invoices created afterwards use the new language.
+export async function setClientLocale(projectId: unknown, locale: unknown): Promise<ActionResult> {
+  const id = demoProjectIdSchema.safeParse(projectId);
+  const chosen = localeSchema.safeParse(locale);
+  if (!id.success || !chosen.success) return { ok: false, error: "invalid_input" };
+
+  if (id.data !== (await currentProjectId())) return { ok: false, error: "not_found" };
+
+  let updated: boolean;
+  try {
+    updated = await updateClientLocale(getDb(), id.data, chosen.data);
+  } catch (error) {
+    console.error("saving the client language failed", error);
+    return { ok: false, error: "server_error" };
+  }
+  if (!updated) return { ok: false, error: "not_found" };
+  refresh();
+  return { ok: true };
 }

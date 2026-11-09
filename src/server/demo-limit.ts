@@ -1,4 +1,5 @@
 import "server-only";
+import { senderKey, senderOf } from "./client-address";
 import { countCopiesCreatedSince, type MayCreateCopy } from "./db/demo";
 
 // Limits on making new demo copies. A request without a cookie gets a new visitor (proxy.ts), and its first page
@@ -63,14 +64,15 @@ export class AddressLimiter {
 // running it locally, the browser tests) would share one allowance. Behind Render's proxy a client is never loopback.
 const LOOPBACK = /^(127\.|::1$|::ffff:127\.)/i;
 
-// The client's address as Render's proxy forwards it: the first X-Forwarded-For entry, else X-Real-IP. Null when
-// neither is set or it is loopback (local runs, which then meet only the daily cap). A client can put its own
-// value in X-Forwarded-For, so this limit slows ordinary bots; the daily cap is the bound that always holds.
+// The key a client's new copies are counted under, read like the webhook's senders (client-address.ts): Cloudflare's
+// CF-Connecting-IP on Render, else the first X-Forwarded-For entry, with one IPv6 /64 as one key. Null when neither
+// header holds an address or it is loopback (local runs, which then meet only the daily cap). Without
+// CF-Connecting-IP a client can write its own X-Forwarded-For, so this limit slows ordinary bots; the daily cap is
+// the bound that always holds.
 export function clientAddress(headers: Pick<Headers, "get">): string | null {
-  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const address = forwarded || headers.get("x-real-ip")?.trim();
-  if (!address || LOOPBACK.test(address)) return null;
-  return address.slice(0, 64);
+  const sender = senderOf(headers);
+  if (sender === "unknown" || LOOPBACK.test(sender)) return null;
+  return senderKey(sender);
 }
 
 const sharedLimiter = new AddressLimiter();

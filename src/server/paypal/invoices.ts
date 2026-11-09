@@ -42,6 +42,7 @@ export interface InvoiceView {
   invoiceNumber: string | null;
   reference: string | null;
   amountValue: string | null; // "650.00"
+  currencyCode: string | null; // "USD"
   payerViewUrl: string | null; // passed through safePayerViewUrl
 }
 
@@ -92,6 +93,11 @@ function text(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+// True for an id in PayPal's invoice id shape (INV2-XXXX-XXXX-XXXX-XXXX).
+export function isPayPalInvoiceId(value: unknown): value is string {
+  return typeof value === "string" && INVOICE_ID.test(value);
+}
+
 function invoicePath(invoiceId: string, action = ""): string {
   // The id comes from our database, but it still goes into a URL, so only PayPal's shape is allowed.
   if (!INVOICE_ID.test(invoiceId)) throw new PayPalError("rejected", null, "INVALID_INVOICE_ID", null);
@@ -116,6 +122,7 @@ function toView(json: unknown, environment: PayPalClient["environment"]): Invoic
     invoiceNumber: text(field(detail, "invoice_number")),
     reference: text(field(detail, "reference")),
     amountValue: text(field(field(json, "amount"), "value")),
+    currencyCode: text(field(field(json, "amount"), "currency_code")),
     payerViewUrl: safePayerViewUrl(field(field(detail, "metadata"), "recipient_view_url"), environment),
   };
 }
@@ -200,11 +207,4 @@ export async function cancelInvoice(client: PayPalClient, invoiceId: string): Pr
 export async function findByInvoiceNumber(client: PayPalClient, invoiceNumber: string): Promise<InvoiceView | null> {
   const found = await search(client, { invoice_number: invoiceNumber });
   return found.find((invoice) => invoice.invoiceNumber === invoiceNumber) ?? null;
-}
-
-// Every invoice whose reference is exactly this one. PayPal's reference search also matches prefixes,
-// so the results are filtered again. Used by the acceptance tests to count invoices per change order.
-export async function invoicesForReference(client: PayPalClient, reference: string): Promise<InvoiceView[]> {
-  const found = await search(client, { reference });
-  return found.filter((invoice) => invoice.reference === reference);
 }

@@ -1,0 +1,31 @@
+# Tollgate on Render: one free web service; the database is a remote libSQL database on Turso's free plan.
+# The free plan needs no card, has no disk, and sleeps after 15 idle minutes (the next visit waits about a minute).
+# Deploys are manual from the `deploy` branch (auto-deploy off). Secrets are entered in the Render Dashboard.
+services:
+  - type: web
+    name: tollgate
+    runtime: node
+    plan: free # no card on file; a paid plan with a disk is the fallback (render.yaml history before the free-plan change)
+    region: oregon
+    branch: deploy
+    autoDeployTrigger: "off" # quoted: a bare off is a boolean in YAML 1.1
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start # migrations run in src/instrumentation.ts before the server takes requests
+    healthCheckPath: /api/health/live
+    envVars:
+      - key: NODE_VERSION
+        value: "22" # same as .nvmrc; Render reads this before .nvmrc, and its default is newer (P3-C5)
+      - key: PAYPAL_ENV
+        value: sandbox # the app refuses to start on Render with anything else
+      - key: DATABASE_URL
+        sync: false # libsql://<database>.turso.io, entered in the Dashboard
+      - key: DATABASE_AUTH_TOKEN
+        sync: false # Turso database token, entered in the Dashboard
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false # set after the webhook is registered (WP 2.3.5)
+      - key: ANTHROPIC_API_KEY
+        sync: false # phase 4

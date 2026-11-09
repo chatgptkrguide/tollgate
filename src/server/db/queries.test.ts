@@ -35,7 +35,17 @@ describe("작업 화면 조회", () => {
       ["Gift card page", "paid"],
       ["Loyalty page with customer login", "draft"],
     ]);
-    expect(data?.totals).toEqual({ agreedCents: 240000, changeOrdersCents: 90000, totalCents: 330000, paidCents: 25000, hasUnpaid: true });
+    expect(data?.totals).toEqual({ agreedCents: 240000, changeOrdersCents: 90000, totalCents: 330000, paidCents: 25000, unpaidCents: 65000, hasUnpaid: true });
+  });
+
+  it("납품 일정은 합의 출시일 Nov 15에 결제된 기프트카드 1일만 더하고 초안 로열티는 잠가 둔다", async () => {
+    const data = await getWorkspace(db, projectId);
+
+    expect(data?.delivery).toMatchObject({ agreedLaunch: "2026-11-15", launch: "2026-11-16", moved: true, lockedDays: 3, launchIfPaid: "2026-11-19" });
+    expect(data?.delivery.rows.map((r) => [r.title, r.state, r.days])).toEqual([
+      ["Gift card page", "unlocked", 1],
+      ["Loyalty page with customer login", "locked", 3],
+    ]);
   });
 
   it("각 인용에는 그 항목의 견적이 붙어 있다", async () => {
@@ -94,6 +104,8 @@ describe("작업 화면 조회", () => {
     expect(data?.changeOrders.map((o) => o.status)).toEqual(["paid", "waived"]);
     expect(data?.messages[3].findings[0].order?.status).toBe("waived");
     expect(data?.totals).toMatchObject({ changeOrdersCents: 25000, totalCents: 265000, hasUnpaid: false });
+    expect(data?.delivery.rows.map((r) => r.state)).toEqual(["unlocked", "included"]);
+    expect(data?.delivery.launch).toBe("2026-11-19");
   });
 
   it("한 인용에 취소 견적이 여럿이면 만든 순서로 나오고, 둘 다 보낸 적이 없으면 나중에 만든 것을 보여 준다", async () => {
@@ -124,7 +136,7 @@ describe("작업 화면 조회", () => {
     const data = await getWorkspace(db, projectId);
 
     expect(Object.keys(data?.project ?? {}).sort()).toEqual(
-      ["agreedOn", "clientEmail", "clientName", "dueOn", "hourlyRateCents", "hoursPerDay", "id", "title"].sort(),
+      ["agreedOn", "clientEmail", "clientLocale", "clientName", "dueOn", "hourlyRateCents", "hoursPerDay", "id", "title"].sort(),
     );
     expect(data?.project).not.toHaveProperty("createdAt");
     expect(data?.project).not.toHaveProperty("lastSeenAt");

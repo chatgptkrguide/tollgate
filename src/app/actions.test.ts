@@ -4,12 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoiceNumberFor } from "@/domain/invoice";
 import type { InvoiceGateway } from "@/server/billing";
 import { createDb, type Db } from "@/server/db/client";
-import { ensureDemoCopy } from "@/server/db/demo";
+import { ensureDemoCopy, projectIdForVisitor } from "@/server/db/demo";
 import { runMigrations } from "@/server/db/migrate";
 import { changeOrders, projects } from "@/server/db/schema";
 import { PayPalError } from "@/server/paypal/errors";
 import { newVisitorId, VISITOR_COOKIE } from "@/server/visitor";
-import { cancelChangeOrder, requoteChangeOrder, resetDemo, sendChangeOrder, waiveChangeOrder } from "./actions";
+import { cancelChangeOrder, checkPayment, requoteChangeOrder, resetDemo, reviewMessage, sendChangeOrder, setClientLocale, waiveChangeOrder } from "./actions";
 
 // Only the framework edges are replaced: the request's cookies, the router refresh, which database to use,
 // and which PayPal to talk to (a stand-in; the real one is never called from unit tests).
@@ -160,6 +160,26 @@ describe("서버 액션: 무료 처리와 데모 재설정", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  it("발송된 견적이 있으면 재설정을 invoice_open으로 거부하고 견적을 지우지 않는다(화면은 새로 그린다)", async () => {
+    signIn(me);
+    const draft = await draftOf(mine);
+    await db
+      .update(changeOrders)
+      .set({ status: "sent", paypalInvoiceId: "INV2-AAAA-BBBB-CCCC-DDDD", sentAt: NOW.toISOString() })
+      .where(eq(changeOrders.id, draft.id));
+    vi.mocked(refresh).mockClear();
+
+    const result = await resetDemo(null, form({ projectId: mine }));
+
+    expect(result).toEqual({ ok: false, error: "invoice_open" });
+    expect(await ordersOf(mine)).toEqual([
+      ["Gift card page", "paid", 25000],
+      ["Loyalty page with customer login", "sent", 65000],
+    ]);
+    expect((await db.select().from(changeOrders).where(eq(changeOrders.id, draft.id)))[0]?.paypalInvoiceId).toBe("INV2-AAAA-BBBB-CCCC-DDDD");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   it("다른 사본의 id로 재설정하면 not_found이고 두 사본 모두 그대로다", async () => {
     signIn(me);
     await waiveChangeOrder(null, form({ changeOrderId: (await draftOf(theirs)).id }));
@@ -172,6 +192,19 @@ describe("서버 액션: 무료 처리와 데모 재설정", () => {
     expect(result).toEqual({ ok: false, error: "not_found" });
     expect(await db.select().from(projects)).toEqual(before);
     expect([await ordersOf(mine), await ordersOf(theirs)]).toEqual(ordersBefore);
+  });
+
+  it("사본이 없는 방문자(읽기 전용 미리보기)가 자기 id로 재설정해도 not_found이고 사본을 만들지 않는다", async () => {
+    const previewVisitor = newVisitorId();
+    signIn(previewVisitor);
+    vi.mocked(refresh).mockClear();
+    const before = await db.select().from(projects);
+
+    const result = await resetDemo(null, form({ projectId: projectIdForVisitor(previewVisitor) }));
+
+    expect(result).toEqual({ ok: false, error: "not_found" });
+    expect(await db.select().from(projects)).toEqual(before);
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("형식이 틀린 프로젝트 id로 재설정하면 invalid_input이다", async () => {
@@ -267,7 +300,7 @@ describe("서버 액션: 발송·취소·다시 견적", () => {
         calls.send.push(id);
         return "sent";
       },
-      get: async (id) => ({ id, status: "SENT", invoiceNumber: null, reference: null, amountValue: "650.00", payerViewUrl: "https://www.sandbox.paypal.com/invoice/p/#DZQMQREH7LATF7YR" }),
+      get: async (id) => ({ id, status: "SENT", invoiceNumber: null, reference: null, amountValue: "650.00", currencyCode: "USD", payerViewUrl: "https://www.sandbox.paypal.com/invoice/p/#DZQMQREH7LATF7YR" }),
       cancel: async (id) => {
         calls.cancel.push(id);
         return "cancelled";
@@ -345,7 +378,7 @@ describe("서버 액션: 발송·취소·다시 견적", () => {
   it("발송하다 PayPal에서 취소된 청구서를 만나면(invoice_void) 화면이 Quote again으로 바뀌도록 refresh를 부른다", async () => {
     signIn(me);
     const draft = await draftOf(mine);
-    request.paypal = { ...healthyPayPal(), get: async (id) => ({ id, status: "CANCELLED", invoiceNumber: null, reference: null, amountValue: "650.00", payerViewUrl: null }) };
+    request.paypal = { ...healthyPayPal(), get: async (id) => ({ id, status: "CANCELLED", invoiceNumber: null, reference: null, amountValue: "650.00", currencyCode: "USD", payerViewUrl: null }) };
 
     const result = await sendChangeOrder(null, form({ changeOrderId: draft.id }));
 
@@ -489,5 +522,173 @@ describe("서버 액션: 발송·취소·다시 견적", () => {
     const result = await requoteChangeOrder(null, form({ changeOrderId: draft.id }));
 
     expect(result).toEqual({ ok: false, error: "server_error" });
+  });
+
+  it("결제 확인 액션은 견적 id 형식이 아니면 invalid_input이다", async () => {
+    signIn(me);
+    const reads: string[] = [];
+    request.paypal = { ...healthyPayPal(), get: async (id) => (reads.push(id), Promise.reject(new Error("not expected"))) };
+
+    const results = [await checkPayment(null, form({ changeOrderId: "not-a-uuid" })), await checkPayment(null, form({}))];
+
+    expect(results).toEqual(Array(2).fill({ ok: false, error: "invalid_input" }));
+    expect(reads).toEqual([]);
+  });
+
+  it("결제 확인 액션은 성공했을 때만 화면을 새로 고친다", async () => {
+    signIn(me);
+    const draft = await draftOf(mine);
+    await sendChangeOrder(null, form({ changeOrderId: draft.id }));
+    vi.mocked(refresh).mockClear();
+    const view = (status: string) => ({ id: "INV2-DZQM-QREH-7LAT-F7YR", status, invoiceNumber: null, reference: draft.id, amountValue: "650.00", currencyCode: "USD", payerViewUrl: null });
+
+    request.paypal = { ...healthyPayPal(), get: async () => view("SENT") };
+    const notYet = await checkPayment(null, form({ changeOrderId: draft.id }));
+    const refreshesBeforePaid = vi.mocked(refresh).mock.calls.length;
+    request.paypal = { ...healthyPayPal(), get: async () => view("PAID") };
+    const paid = await checkPayment(null, form({ changeOrderId: draft.id, amountCents: "1", status: "paid" }));
+
+    expect(notYet).toEqual({ ok: false, error: "not_paid_yet" });
+    expect(refreshesBeforePaid).toBe(0);
+    expect(paid).toEqual({ ok: true });
+    expect(await statusOf(draft.id)).toBe("paid");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("다른 사본의 견적으로 결제 확인을 누르면 not_found이고 PayPal을 부르지 않는다", async () => {
+    signIn(me);
+    const theirDraft = await draftOf(theirs);
+    const reads: string[] = [];
+    request.paypal = { ...healthyPayPal(), get: async (id) => (reads.push(id), Promise.reject(new Error("not expected"))) };
+
+    const result = await checkPayment(null, form({ changeOrderId: theirDraft.id }));
+
+    expect(result).toEqual({ ok: false, error: "not_found" });
+    expect(reads).toEqual([]);
+  });
+});
+
+describe("메시지 검토 액션", () => {
+  beforeEach(async () => {
+    request.cookies.clear();
+    request.db = createDb("file::memory:");
+    await runMigrations(request.db);
+    vi.mocked(refresh).mockClear();
+  });
+
+  const form = (message: string | null) => {
+    const data = new FormData();
+    if (message !== null) data.set("message", message);
+    return data;
+  };
+
+  it("쿠키가 없으면 not_found", async () => {
+    expect(await reviewMessage(null, form("Add a blog?"))).toEqual({ ok: false, error: "not_found" });
+  });
+
+  it("글이 없으면 invalid_input", async () => {
+    expect(await reviewMessage(null, form(null))).toEqual({ ok: false, error: "invalid_input" });
+  });
+
+  it("키가 없는 서버는 not_configured", async () => {
+    const visitorId = newVisitorId();
+    await ensureDemoCopy(request.db as Db, visitorId, new Date());
+    request.cookies.set(VISITOR_COOKIE, visitorId);
+    expect(await reviewMessage(null, form("Add a blog?"))).toEqual({ ok: false, error: "not_configured" });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("고객 언어 액션", () => {
+  let db: Db;
+  const me = newVisitorId();
+  const someoneElse = newVisitorId();
+  let mine: string;
+  let theirs: string;
+
+  beforeEach(async () => {
+    db = createDb(":memory:");
+    await runMigrations(db);
+    request.db = db;
+    request.cookies.clear();
+    mine = (await ensureDemoCopy(db, me, NOW)).projectId;
+    theirs = (await ensureDemoCopy(db, someoneElse, NOW)).projectId;
+  });
+
+  const localeOf = async (projectId: string) =>
+    (await db.select({ clientLocale: projects.clientLocale }).from(projects).where(eq(projects.id, projectId)))[0]?.clientLocale;
+
+  it("새 데모 사본의 고객 언어는 en이다", async () => {
+    expect(await localeOf(mine)).toBe("en");
+  });
+
+  it("내 사본이면 고객 언어를 바꾸고 화면을 새로 그리게 refresh를 부른다", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+
+    const result = await setClientLocale(mine, "ja");
+
+    expect(result).toEqual({ ok: true });
+    expect(await localeOf(mine)).toBe("ja");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("다른 방문자의 사본은 not_found이고 그 사본의 언어는 그대로다", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+
+    const result = await setClientLocale(theirs, "ko");
+
+    expect(result).toEqual({ ok: false, error: "not_found" });
+    expect(await localeOf(theirs)).toBe("en");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("쿠키가 없거나 형식이 틀리면 not_found이고 아무것도 바꾸지 않는다", async () => {
+    expect(await setClientLocale(mine, "ko")).toEqual({ ok: false, error: "not_found" });
+    request.cookies.set(VISITOR_COOKIE, "forged");
+    expect(await setClientLocale(mine, "ko")).toEqual({ ok: false, error: "not_found" });
+
+    expect(await localeOf(mine)).toBe("en");
+  });
+
+  it.each([["fr"], ["KO"], [""], [null], [42], [["ko"]]])("지원하지 않는 언어 %j는 invalid_input이고 DB를 건드리지 않는다", async (locale) => {
+    request.cookies.set(VISITOR_COOKIE, me);
+
+    const result = await setClientLocale(mine, locale);
+
+    expect(result).toEqual({ ok: false, error: "invalid_input" });
+    expect(await localeOf(mine)).toBe("en");
+  });
+
+  it("사본 id 형식이 아니면 invalid_input이다(로컬 시드 id 'demo' 포함)", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+
+    expect(await setClientLocale("demo", "ko")).toEqual({ ok: false, error: "invalid_input" });
+    expect(await setClientLocale({ id: mine }, "ko")).toEqual({ ok: false, error: "invalid_input" });
+  });
+
+  it("쿠키는 맞지만 사본이 정리돼 없어졌으면 not_found다", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+    await db.delete(projects).where(eq(projects.id, mine));
+
+    expect(await setClientLocale(mine, "ko")).toEqual({ ok: false, error: "not_found" });
+  });
+
+  it("DB가 실패하면 server_error이고 refresh를 부르지 않는다", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+    db.$client.close();
+
+    const result = await setClientLocale(mine, "ko");
+
+    expect(result).toEqual({ ok: false, error: "server_error" });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("데모를 재설정하면 고객 언어도 en으로 돌아간다", async () => {
+    request.cookies.set(VISITOR_COOKIE, me);
+    await setClientLocale(mine, "pt");
+
+    await resetDemo(null, form({ projectId: mine }));
+
+    expect(await localeOf(mine)).toBe("en");
   });
 });

@@ -1,11 +1,12 @@
 import "server-only";
-import type { ActivityDetail } from "@/domain/activity";
-import type { ActionResult, BillingActionResult, PayPalActionError } from "@/domain/action-result";
+import type { ActionResult, BillingActionResult } from "@/domain/action-result";
 import { canTransition } from "@/domain/change-order";
 import { invoiceNumberFor, SENT_LIKE } from "@/domain/invoice";
+import { paymentDecision } from "@/domain/payment";
 import { extraDaysForHours, formatUsd, priceForHours, toPayPalValue } from "@/domain/money";
-import { createSendLog, SEND_LIMITS, takeSend, type SendLog } from "@/domain/send-limit";
-import { activityInsert, activityInsertAfterChange, countSendsSince } from "./db/activity";
+import { invoiceTexts } from "@/i18n/invoice";
+import { actionErrorFor, errorDetail, failureSummary, recordFailure, type PayPalStep } from "./billing-errors";
+import { activityInsertAfterChange } from "./db/activity";
 import {
   claimSend,
   markCancelled,
@@ -20,7 +21,9 @@ import {
 } from "./db/change-orders";
 import { getDb, type Db } from "./db/client";
 import { isUniqueViolation } from "./db/errors";
+import { takePayPalSend } from "./db/paypal-sends";
 import { changeOrders } from "./db/schema";
+import { settleStatements } from "./payments";
 import { PayPalError } from "./paypal/errors";
 import {
   cancelInvoice,
@@ -51,9 +54,6 @@ export interface BillingDeps {
   db: Db;
   paypal: InvoiceGateway | null; // null: no PayPal keys on this server
   now: () => Date; // read again at each step, so activity times follow the steps
-  // This process's recent sends, for the server-wide cap (P2-S1). liveBillingDeps passes the server's own; without
-  // one, only the database's count applies.
-  sendLog?: SendLog;
 }
 
 export function invoiceGateway(client: PayPalClient): InvoiceGateway {
@@ -65,99 +65,37 @@ export function invoiceGateway(client: PayPalClient): InvoiceGateway {
   };
 }
 
-// Lives as long as the server process: every request's sends count toward one cap.
-const serverSendLog = createSendLog();
-
 export function liveBillingDeps(): BillingDeps {
   const client = getPayPal();
-  return { db: getDb(), paypal: client && invoiceGateway(client), now: () => new Date(), sendLog: serverSendLog };
+  return { db: getDb(), paypal: client && invoiceGateway(client), now: () => new Date() };
 }
 
 export { SEND_CLAIM_TTL_MS };
-
-type PayPalStep = "create" | "send" | "read" | "cancel";
 
 type BillingError = Extract<BillingActionResult, { ok: false }>["error"];
 const OK: BillingActionResult = { ok: true };
 const fail = (error: BillingError): BillingActionResult => ({ ok: false, error });
 
-const stepText: Record<PayPalStep, string> = {
-  create: "creating the invoice",
-  send: "sending the invoice",
-  read: "reading the invoice back",
-  cancel: "cancelling the invoice",
-};
-
-// What a refusal at each step leaves behind. Once the invoice was sent, nothing may claim that nothing happened.
-const refusalMeans: Record<PayPalStep, string> = {
-  create: "no invoice was made",
-  send: "it wasn't sent",
-  read: "it was sent but couldn't be confirmed",
-  cancel: "the invoice is still open",
-};
-
-function failureSummary(error: PayPalError, step: PayPalStep): string {
-  switch (error.failure) {
-    case "rejected":
-      return `PayPal refused the request while ${stepText[step]}${error.issue ? ` (${error.issue})` : ""}; ${refusalMeans[step]}.`;
-    case "auth":
-      return `PayPal didn't accept the app's credentials while ${stepText[step]}.`;
-    case "not_found":
-      return `PayPal couldn't find the invoice while ${stepText[step]}.`;
-    default:
-      return `PayPal didn't respond while ${stepText[step]}; trying again won't bill the client twice.`;
-  }
-}
-
-function actionErrorFor(error: PayPalError): PayPalActionError {
-  if (error.failure === "not_configured") return "not_configured";
-  return error.failure === "rejected" ? "paypal_rejected" : "paypal_unavailable";
-}
-
-const hoursFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
-
-// What PayPal shows the client. Everything comes from the database, never from the form.
+// What PayPal shows the client. Everything comes from the database, never from the form. The description and note are
+// written in the project's client language (i18n/invoice.ts); in English they are the same lines as before it existed.
+// The language is read when the invoice is created: an invoice PayPal already has keeps its words.
 function invoiceInputFor(order: BillingOrder): InvoiceInput {
   const { project } = order;
   const exactCents = (Math.round(order.hours * 100) * project.hourlyRateCents) / 100;
-  const rounded = order.amountCents > exactCents ? ", rounded up to the next $10" : "";
+  const { description, note } = invoiceTexts(project.clientLocale, {
+    projectTitle: project.title,
+    hours: order.hours,
+    hourlyRateCents: project.hourlyRateCents,
+    roundedUp: order.amountCents > exactCents,
+  });
   return {
     changeOrderId: order.id,
     title: order.title,
-    description: `Estimated ${hoursFormat.format(order.hours)} h at ${formatUsd(project.hourlyRateCents)}/h${rounded}`,
-    note: `Change order for ${project.title}. Not part of the agreed scope.`,
+    description,
+    note,
     amountCents: order.amountCents,
     recipient: { email: project.clientEmail, businessName: project.clientName },
   };
-}
-
-interface FailureRecord {
-  ownerProjectId: string;
-  changeOrderId: string;
-  step: PayPalStep;
-  summary: string;
-  detail: ActivityDetail;
-}
-
-// Best effort: a failed PayPal call is logged and recorded, but failing to record it never changes the answer.
-async function recordFailure(deps: BillingDeps, record: FailureRecord): Promise<void> {
-  try {
-    await activityInsert(deps.db, {
-      projectId: record.ownerProjectId,
-      changeOrderId: record.changeOrderId,
-      kind: "paypal_failed",
-      actor: "paypal",
-      summary: record.summary,
-      detail: { step: record.step, ...record.detail },
-      at: deps.now().toISOString(),
-    });
-  } catch (error) {
-    console.error("recording a PayPal failure failed", error);
-  }
-}
-
-function errorDetail(error: PayPalError): ActivityDetail {
-  return { httpStatus: error.httpStatus, issue: error.issue, debugId: error.debugId };
 }
 
 // Best effort: a claim that can't be given up (the database is down) expires after SEND_CLAIM_TTL_MS anyway.
@@ -200,17 +138,10 @@ async function voidDraft(deps: BillingDeps, ownerProjectId: string, changeOrderI
   return status === "sent" ? OK : fail(status === null ? "not_found" : "invalid_state");
 }
 
-// The server-wide send cap (P2-S1). The database's counts are read first; the decision itself never awaits, so two
-// requests in this process can't both take the last place.
-async function withinSendLimit(deps: BillingDeps, at: Date): Promise<boolean> {
-  const stored = await Promise.all(SEND_LIMITS.map((limit) => countSendsSince(deps.db, new Date(at.getTime() - limit.windowMs).toISOString())));
-  return takeSend(deps.sendLog ?? createSendLog(), at, stored);
-}
-
-// PayPal's status for the invoice, or null if it can't be read just now.
-async function statusIfReadable(paypal: InvoiceGateway, invoiceId: string): Promise<string | null> {
+// The invoice as PayPal shows it, or null if it can't be read just now.
+async function invoiceIfReadable(paypal: InvoiceGateway, invoiceId: string): Promise<InvoiceView | null> {
   try {
-    return (await paypal.get(invoiceId)).status;
+    return await paypal.get(invoiceId);
   } catch {
     return null;
   }
@@ -223,8 +154,8 @@ async function statusIfReadable(paypal: InvoiceGateway, invoiceId: string): Prom
 // Every way out gives the claim back, a database error included, so a retry isn't held off for two minutes. Once
 // PayPal was asked to send, a failure answers paypal_unconfirmed, never "nothing changed": the client may have the
 // invoice, and Send again settles it either way (P2-D2). An invoice PayPal shows as cancelled, or a number that is
-// used up, makes the draft cancelled so it can be quoted again (P2-D4). Past the server-wide send cap, PayPal isn't
-// called at all (P2-S1).
+// used up, makes the draft cancelled so it can be quoted again (P2-D4). Past the copy's or the server-wide send cap,
+// PayPal isn't called at all (P2-S1, P2-S5).
 export async function sendOwnedChangeOrder(deps: BillingDeps, ownerProjectId: string, changeOrderId: string): Promise<BillingActionResult> {
   const { db, paypal, now } = deps;
   if (!paypal) return fail("not_configured");
@@ -255,10 +186,11 @@ export async function sendOwnedChangeOrder(deps: BillingDeps, ownerProjectId: st
       await release();
       return fail(current === null ? "not_found" : "invalid_state");
     }
-    if (!(await withinSendLimit(deps, claimedAt))) {
-      console.warn("the server-wide PayPal send limit is reached; not calling PayPal");
+    const take = await takePayPalSend(db, ownerProjectId, changeOrderId, claimedAt);
+    if (take !== "taken") {
+      console.warn(take === "copy_full" ? "a demo copy reached its PayPal send limit; not calling PayPal" : "the server-wide PayPal send limit is reached; not calling PayPal");
       await release();
-      return fail("rate_limited");
+      return fail(take === "copy_full" ? "copy_rate_limited" : "rate_limited");
     }
     let invoiceId = current.paypalInvoiceId;
     if (!invoiceId) {
@@ -318,9 +250,23 @@ export async function sendOwnedChangeOrder(deps: BillingDeps, ownerProjectId: st
     try {
       sendResult = await paypal.send(invoiceId);
     } catch (error) {
-      // PayPal won't send an invoice someone cancelled there. Read it back to tell that apart from other refusals.
-      if (error instanceof PayPalError && error.failure === "rejected" && (await statusIfReadable(paypal, invoiceId)) === "CANCELLED") {
-        return await cancelledInPayPal("CANCELLED");
+      // PayPal won't send an invoice someone cancelled there, or one that is already paid. Read it back to tell those
+      // apart from other refusals: a cancelled one voids the draft (P2-D4), a paid one settles it (P2-D7).
+      if (!(error instanceof PayPalError) || error.failure !== "rejected") throw error;
+      const invoice = await invoiceIfReadable(paypal, invoiceId);
+      if (invoice?.status === "CANCELLED") return await cancelledInPayPal("CANCELLED");
+      if (invoice) {
+        const order = { id: changeOrderId, status: "draft" as const, amountCents: current.amountCents, paypalInvoiceId: invoiceId, projectId: ownerProjectId, sentAt: null };
+        const decision = paymentDecision(order, invoice);
+        const [first, ...rest] = await settleStatements(db, order, invoice, decision, now().toISOString(), "send");
+        if (first) {
+          await db.batch([first, ...rest]);
+          // This request's draft, or the webhook that got there first: either way the order is paid now.
+          const status = await ownedStatus(db, ownerProjectId, changeOrderId);
+          if (status === "paid") return OK;
+          await release();
+          return fail(status === null ? "not_found" : "invalid_state");
+        }
       }
       throw error;
     }
@@ -357,7 +303,9 @@ export async function sendOwnedChangeOrder(deps: BillingDeps, ownerProjectId: st
       }),
     ]);
     if (marked.rowsAffected === 0) {
-      return (await ownedStatus(db, ownerProjectId, changeOrderId)) === "sent" ? OK : fail("invalid_state");
+      // Another request saved it as sent, or the payment webhook already settled the draft (P2-D7).
+      const status = await ownedStatus(db, ownerProjectId, changeOrderId);
+      return status === "sent" || status === "paid" ? OK : fail("invalid_state");
     }
     return OK;
   } catch (error) {

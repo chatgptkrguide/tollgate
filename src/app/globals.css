@@ -1,68 +1,409 @@
 @import "tailwindcss";
 
-/* Direction A "Redline": a contract under review. Only the mark (violet) and paid (green) carry color. */
+/* Direction "Toll ticket" (docs/DESIGN.md): each change order is a toll ticket, and payment lifts its barrier.
+   Only STOP (unpaid, locked) and GO (paid, unlocked) carry colour; grey means included at no charge. */
 @theme {
-  --color-paper: #eef0f3;
-  --color-sheet: #ffffff;
-  --color-ink: #1b2230;
-  --color-ink-soft: #5b6474;
-  --color-rule: #d5dae1;
-  --color-mark: #6a3fd1;
-  --color-mark-wash: #efeafc;
-  --color-paid: #11795a;
-  --color-paid-wash: #e2f2eb;
+  --color-canvas: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-line: #e3e6eb;
+  --color-field: #7b8494; /* input borders: 3.8:1 on white */
+  --color-ink: #12161f;
+  --color-ink-hover: #2a3140;
+  --color-ink-2: #4a5262; /* 7.3:1 on canvas, 7.9:1 on surface */
+  --color-stop: #d9480f; /* fills, lamps, underlines, large figures (4.3:1 on white) */
+  --color-stop-ink: #b23c0a; /* small STOP text: 5.9:1 on white, 5.1:1 on stop-wash */
+  --color-stop-wash: #fdebe3;
+  --color-go: #12805c; /* 4.9:1 on white */
+  --color-go-ink: #0e6a4c; /* small GO text on go-wash: 5.8:1 */
+  --color-go-wash: #e3f3ec;
+  --color-idle: #8a93a3; /* included / cancelled lamps and segments (non-text, 3.1:1) */
+  --color-idle-wash: #eceef2;
+
+  --shadow-ticket: 0 1px 2px rgb(18 22 31 / 0.06), 0 4px 12px rgb(18 22 31 / 0.06);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @theme inline {
-  --font-serif: var(--font-literata), Georgia, serif;
+  --font-display: var(--font-overpass), "Helvetica Neue", Arial, sans-serif;
   --font-sans: var(--font-public-sans), system-ui, sans-serif;
+  --font-mono: var(--font-overpass-mono), ui-monospace, "SFMono-Regular", monospace;
+}
+
+:root {
+  --barrier-stripes: repeating-linear-gradient(-45deg, var(--color-ink) 0 6px, #ffffff 6px 12px);
+  --barrier-stripes-idle: repeating-linear-gradient(-45deg, var(--color-idle) 0 6px, #ffffff 6px 12px);
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  /* Anchors, focus and scrollIntoView stop below the sticky app bar (64px) */
+  scroll-padding-top: 80px;
 }
 
 body {
-  background: var(--color-paper);
+  background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
 }
 
+/* Line breaks that read right in each script: Korean breaks between words, not inside them; Japanese breaks between
+   phrases where the browser can tell (Chrome), elsewhere anywhere as usual. A word too long for its box still breaks. */
+html:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+html:lang(ja) {
+  word-break: auto-phrase;
+}
+
+::selection {
+  background: var(--color-stop-wash);
+  color: var(--color-ink);
+}
+
 :focus-visible {
-  outline: 2px solid var(--color-mark);
+  outline: 2px solid var(--color-ink);
   outline-offset: 2px;
 }
+
+/* ---------- Buttons: 1px press, no layout shift ---------- */
+
+.btn {
+  position: relative;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  padding-top: 2px; /* Overpass sits high in its line box */
+  transition:
+    background-color 120ms ease-out,
+    border-color 120ms ease-out,
+    color 120ms ease-out,
+    transform 100ms ease-out;
+}
+.btn:not([aria-disabled="true"]):active {
+  transform: translateY(1px);
+}
+.btn-primary {
+  background: var(--color-ink);
+  color: #fff;
+}
+.btn-primary:not([aria-disabled="true"]):hover {
+  background: var(--color-ink-hover);
+}
+.btn-primary[aria-disabled="true"] {
+  background: var(--color-line);
+  color: var(--color-ink-2);
+}
+.btn-secondary {
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.btn-secondary:not([aria-disabled="true"]):hover {
+  border-color: var(--color-ink-2);
+}
+.btn-secondary:not([aria-disabled="true"]):active {
+  background: var(--color-canvas);
+}
+.btn-secondary[aria-disabled="true"] {
+  color: var(--color-ink-2);
+}
+
+/* Indeterminate progress along the bottom edge of a busy button */
+.btn-progress {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  overflow: hidden;
+}
+.btn-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: var(--color-stop);
+  animation: btn-progress 900ms ease-in-out infinite;
+}
+@keyframes btn-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+/* ---------- Selects (screen language, client language) ---------- */
+
+/* Native <select>s dressed like the buttons: Overpass, 44 px tall, a chevron, 16 px text so iOS doesn't zoom. In the
+   components layer so a utility (pl-9 for the globe) can adjust the padding. */
+@layer components {
+  .select {
+    appearance: none;
+    min-height: 44px;
+    max-width: 100%;
+    border: 1px solid var(--color-field);
+    border-radius: 8px;
+    background: var(--color-surface)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2312161f' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      no-repeat right 12px center / 12px 12px;
+    padding: 2px 36px 0 12px;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--color-ink);
+    cursor: pointer;
+    transition: border-color 120ms ease-out, background-color 120ms ease-out;
+  }
+  .select:hover {
+    border-color: var(--color-ink);
+  }
+  .select[aria-busy="true"] {
+    color: var(--color-ink-2);
+    cursor: progress;
+  }
+  /* In the app bar: a quieter border that firms up on hover, like the Reset demo text button beside it */
+  .select-quiet {
+    border-color: var(--color-line);
+  }
+}
+
+/* ---------- Status lamp ---------- */
+
+.lamp {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--lamp, var(--color-idle));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lamp, var(--color-idle)) 18%, transparent);
+}
+[data-tone="stop"] {
+  --lamp: var(--color-stop);
+  --tone-ink: var(--color-stop-ink);
+  --tone-wash: var(--color-stop-wash);
+}
+[data-tone="go"] {
+  --lamp: var(--color-go);
+  --tone-ink: var(--color-go-ink);
+  --tone-wash: var(--color-go-wash);
+}
+[data-tone="idle"] {
+  --lamp: var(--color-idle);
+  --tone-ink: var(--color-ink-2);
+  --tone-wash: var(--color-idle-wash);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 9999px;
+  background: var(--tone-wash);
+  color: var(--tone-ink);
+  padding: 5px 12px 3px 10px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* ---------- Ticket ---------- */
+
+.ticket {
+  position: relative;
+  overflow: hidden; /* clips the perforation notches and the raised arm */
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-ticket);
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+.ticket[data-linked],
+.ticket:target {
+  border-color: var(--color-ink-2);
+  box-shadow: var(--shadow-ticket), 0 0 0 3px var(--color-line);
+}
+
+/* Perforation: a dashed tear line with a half-circle notch on each side */
+.perf {
+  position: relative;
+  height: 16px;
+}
+.perf::before {
+  content: "";
+  position: absolute;
+  inset: 7px 18px auto 18px;
+  border-top: 2px dashed var(--color-line);
+}
+.perf > span {
+  position: absolute;
+  top: 0;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--color-line);
+  border-radius: 9999px;
+  background: var(--color-canvas);
+}
+.perf > span:first-child { left: -9px; }
+.perf > span:last-child { right: -9px; }
+
+/* The stub's lane: a post with its lamp, the striped arm, and the rest it lies on when down. While the gate is up
+   (paid or included) the lane is taller, so the raised arm shows about 140 px of its length above the post instead of
+   a stump; it runs on past the tear line, where the lane clips it. The ticket is already that tall when the lift
+   starts (the server rendered it paid), so nothing moves under the animation. */
+.lane {
+  position: relative;
+  height: 96px; /* the stamp sits clear above the lowered arm, whatever its length in each language */
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-line);
+}
+.ticket[data-gate="up"] .lane {
+  height: 168px;
+}
+.lane-post {
+  position: absolute;
+  left: 20px;
+  bottom: 0;
+  width: 12px;
+  height: 46px;
+  border-radius: 3px 3px 0 0;
+  background: var(--color-ink);
+}
+.lane-post::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: -13px;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--lamp, var(--color-idle));
+}
+.lane-arm {
+  position: absolute;
+  left: 26px;
+  bottom: 26px;
+  width: calc(100% - 58px);
+  height: 12px;
+  border: 1px solid var(--color-ink);
+  border-radius: 2px 5px 5px 2px;
+  background: var(--barrier-stripes);
+  transform-origin: 0 50%;
+  transition: transform 0ms;
+}
+.lane-rest {
+  position: absolute;
+  right: 22px;
+  bottom: 0;
+  width: 4px;
+  height: 26px;
+  background: var(--color-ink-2);
+}
+.lane-rest::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: -2px;
+  width: 12px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-ink-2);
+}
+.lane-caption {
+  position: absolute;
+  left: 48px;
+  bottom: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-2);
+  text-transform: uppercase;
+}
+.ticket[data-gate="up"] .lane-arm {
+  transform: rotate(-80deg);
+}
+/* Up, the stamp sits mid-lane on the right, clear of the arm */
+.ticket[data-gate="up"] .stamp {
+  top: calc(50% - 22px);
+}
+.ticket[data-gate-tone="idle"] .lane-arm {
+  border-color: var(--color-idle);
+  background: var(--barrier-stripes-idle);
+}
+.ticket[data-gate-tone="idle"] .lane-post {
+  background: var(--color-idle);
+}
+
+.stamp {
+  position: absolute;
+  right: 20px;
+  top: 12px;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  padding: 3px 8px 1px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: rotate(-4deg);
+  background: var(--color-surface);
+}
+.stamp[data-tone="go"] { color: var(--color-go-ink); }
+.stamp[data-tone="stop"] { color: var(--color-stop-ink); }
+.stamp[data-tone="idle"] { color: var(--color-ink-2); }
+.stamp[data-tone="ink"] { color: var(--color-ink); }
+
+/* Tickets row: a horizontal scroll-snap row on a phone, a column from lg up */
+.ticket-row {
+  scrollbar-width: thin;
+}
+
+/* The printer slot new tickets come out of */
+.ticket-slot {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--color-ink);
+  box-shadow: inset 0 -3px 0 rgb(255 255 255 / 0.14);
+}
+
+/* ---------- Marks in client messages ---------- */
 
 /* A scope addition in a client message: wash + 2px underline drawn left to right */
 .scope-mark {
   background-image:
-    linear-gradient(var(--mark-line, var(--color-mark)), var(--mark-line, var(--color-mark))),
-    linear-gradient(var(--mark-wash, var(--color-mark-wash)), var(--mark-wash, var(--color-mark-wash)));
+    linear-gradient(var(--mark-line, var(--color-stop)), var(--mark-line, var(--color-stop))),
+    linear-gradient(var(--mark-wash, var(--color-stop-wash)), var(--mark-wash, var(--color-stop-wash)));
   background-repeat: no-repeat;
   background-position: 0 100%, 0 0;
   background-size: 100% 2px, 100% 100%;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  padding: 0 1px;
+  padding: 0 2px;
+  border-radius: 2px;
+  transition: box-shadow 150ms ease-out;
 }
-
 .scope-mark[data-animate="true"] {
-  animation: mark-draw 520ms cubic-bezier(0.3, 0, 0.2, 1) both;
+  animation: mark-draw 500ms cubic-bezier(0.3, 0, 0.2, 1) both;
 }
-
-.margin-note[data-animate="true"] {
-  animation: note-in 260ms cubic-bezier(0.2, 0, 0, 1) 420ms both;
-}
-
 @keyframes mark-draw {
   from { background-size: 0% 2px, 0% 100%; }
 }
-
-@keyframes note-in {
-  from { opacity: 0; transform: translateX(12px); }
+.scope-mark[data-linked],
+.scope-mark:target {
+  box-shadow: 0 0 0 2px var(--mark-line, var(--color-stop));
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .scope-mark[data-animate="true"],
-  .margin-note[data-animate="true"] {
-    animation: none;
-  }
+.scope-mark a {
+  color: inherit;
+  text-decoration: none;
+  border-radius: 2px;
 }
 
 /* <mark> keeps its meaning, not the browser's yellow */
@@ -70,18 +411,169 @@ mark.scope-mark {
   color: inherit;
   background-color: transparent;
 }
-
 .scope-mark[data-status="paid"] {
-  --mark-line: var(--color-paid);
-  --mark-wash: var(--color-paid-wash);
+  --mark-line: var(--color-go);
+  --mark-wash: var(--color-go-wash);
 }
-
-.scope-mark[data-status="waived"] {
-  --mark-line: var(--color-ink-soft);
-  --mark-wash: transparent;
-}
-
+.scope-mark[data-status="waived"],
 .scope-mark[data-status="cancelled"] {
-  --mark-line: var(--color-ink-soft);
-  --mark-wash: transparent;
+  --mark-line: var(--color-idle);
+  --mark-wash: var(--color-idle-wash);
+}
+
+/* ---------- Composer: scanning line while Claude reads ---------- */
+
+.scan-line {
+  pointer-events: none;
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 0;
+  height: 2px;
+  background: var(--color-stop);
+  box-shadow: 0 0 0 1px rgb(217 72 15 / 0.15);
+  animation: scan 1400ms ease-in-out infinite alternate;
+}
+@keyframes scan {
+  from { transform: translateY(4px); }
+  to { transform: translateY(calc(var(--scan-h, 96px) - 6px)); }
+}
+
+/* ---------- Delivery road ---------- */
+
+.road-seg {
+  position: relative;
+  min-width: 12px;
+  height: 14px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--seg, var(--color-idle));
+}
+.road-seg[data-state="unlocked"] { --seg: var(--color-go); }
+.road-seg[data-state="included"] { --seg: var(--color-idle); }
+.road-seg[data-state="locked"] { --seg: #fff; box-shadow: inset 0 0 0 1px var(--color-ink); }
+.road-seg > .hatch {
+  position: absolute;
+  inset: 0;
+  background: var(--barrier-stripes);
+  opacity: 0;
+}
+.road-seg[data-state="locked"] > .hatch { opacity: 1; }
+.swatch {
+  display: inline-block;
+  width: 16px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+
+/* ---------- Motion: played once by MotionDirector (data-fx), never under reduced motion ---------- */
+
+/* 1. Gate lift: the arm swings up around its post with a slight overshoot */
+.ticket[data-fx="lift"] .lane-arm {
+  animation: gate-lift 700ms cubic-bezier(0.3, 0, 0.2, 1) both;
+}
+@keyframes gate-lift {
+  0% { transform: rotate(0deg); }
+  72% { transform: rotate(-87deg); }
+  100% { transform: rotate(-80deg); }
+}
+/* The lamps hold STOP, then switch at about 300 ms in one step (no muddy STOP-to-GO blend) */
+.ticket[data-fx="lift"] .lamp {
+  animation: lamp-switch 700ms linear both;
+}
+.ticket[data-fx="lift"] .lane-post::before {
+  animation: post-lamp-switch 700ms linear both;
+}
+@keyframes lamp-switch {
+  0%, 42% { background-color: var(--color-stop); box-shadow: 0 0 0 3px rgb(217 72 15 / 0.18); }
+  43%, 100% { background-color: var(--lamp); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lamp) 18%, transparent); }
+}
+@keyframes post-lamp-switch {
+  0%, 42% { background-color: var(--color-stop); }
+  43%, 100% { background-color: var(--lamp); }
+}
+.ticket[data-fx="lift"] .stamp {
+  animation: stamp-in 950ms var(--ease-out-soft) both;
+}
+@keyframes stamp-in {
+  0%, 50% { opacity: 0; transform: rotate(-4deg) scale(1.6); }
+  75% { opacity: 1; transform: rotate(-4deg) scale(0.94); }
+  100% { opacity: 1; transform: rotate(-4deg) scale(1); }
+}
+.ticket[data-fx="lift"] .lane-caption {
+  animation: caption-in 300ms ease-out 450ms backwards;
+}
+@keyframes caption-in {
+  from { opacity: 0; }
+}
+.road-seg[data-fx="lift"] > .hatch {
+  animation: unhatch 600ms ease-out 250ms backwards;
+}
+@keyframes unhatch {
+  from { opacity: 1; }
+}
+[data-fx="flip"] .launch-now {
+  display: inline-block;
+  animation: flip 450ms var(--ease-out-soft) 350ms backwards;
+}
+@keyframes flip {
+  from { opacity: 0; transform: perspective(200px) rotateX(-90deg); }
+}
+[data-fx="flip"] .launch-was {
+  animation: strike 400ms ease-out 250ms backwards;
+}
+@keyframes strike {
+  from { text-decoration-color: transparent; }
+}
+[data-fx="settle"] .total-figure {
+  animation: settle 700ms var(--ease-out-soft) 300ms backwards;
+}
+@keyframes settle {
+  0% { color: var(--color-stop); transform: translateY(0); }
+  45% { transform: translateY(-3px); }
+  100% { transform: translateY(0); }
+}
+[data-fx="settle"] .chip {
+  animation: chip-pop 450ms var(--ease-out-soft) 450ms backwards;
+}
+@keyframes chip-pop {
+  from { opacity: 0; transform: scale(0.85); }
+}
+
+/* 2. Ticket printing: a new draft slides down out of the slot */
+.ticket[data-fx="print"] {
+  animation: print 420ms var(--ease-out-soft) both;
+}
+@keyframes print {
+  from { transform: translateY(-48px); clip-path: inset(48px 0 0 0 round 10px); }
+  to { transform: translateY(0); clip-path: inset(0 0 0 0 round 10px); }
+}
+
+/* 6. Activity: new entries fade and slide in, 60 ms apart */
+[data-fx="in"] {
+  animation: feed-in 320ms var(--ease-out-soft) calc(var(--fx-i, 0) * 60ms) backwards;
+}
+@keyframes feed-in {
+  from { opacity: 0; transform: translateY(-6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scope-mark[data-animate="true"],
+  [data-fx],
+  [data-fx] *,
+  [data-fx] *::before,
+  [data-fx] *::after,
+  .btn-progress::after,
+  .scan-line {
+    animation: none !important;
+  }
+  .scan-line {
+    display: none;
+  }
+  .btn,
+  .ticket,
+  .scope-mark {
+    transition: none;
+  }
 }

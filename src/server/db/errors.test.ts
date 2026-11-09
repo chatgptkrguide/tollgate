@@ -50,6 +50,16 @@ describe("고유 제약 위반 판정", () => {
     expect(isUniqueViolation(duplicate)).toBe(true);
   });
 
+  it("extendedCode 없이 SQLITE_CONSTRAINT와 SQLite 문구만 온 원격 오류도 고유 제약 위반으로 본다", () => {
+    const remote = Object.assign(new Error("SQLITE_CONSTRAINT: SQLite error: UNIQUE constraint failed: projects.id"), { code: "SQLITE_CONSTRAINT" });
+    const wrapped = Object.assign(new Error("Failed query"), { cause: remote });
+    const remoteCheck = Object.assign(new Error("SQLITE_CONSTRAINT: SQLite error: CHECK constraint failed: rate"), { code: "SQLITE_CONSTRAINT" });
+
+    expect(isUniqueViolation(remote)).toBe(true);
+    expect(isUniqueViolation(wrapped)).toBe(true);
+    expect(isUniqueViolation(remoteCheck)).toBe(false);
+  });
+
   it("CHECK 위반이나 일반 오류는 고유 제약 위반이 아니다", async () => {
     const checkFailure = await errorOf(db.update(projects).set({ hourlyRateCents: 0 }).where(eq(projects.id, "p-test")));
 

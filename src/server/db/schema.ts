@@ -3,6 +3,8 @@ import { check, index, integer, real, sqliteTable, text, uniqueIndex } from "dri
 // Relative imports: drizzle-kit loads this file without the "@/" path alias.
 import type { ActivityActor, ActivityDetail, ActivityKind } from "../../domain/activity";
 import { CHANGE_ORDER_STATUSES } from "../../domain/types";
+import { LOCALES } from "../../i18n/locales";
+import type { WebhookOutcome } from "../../domain/webhook";
 
 export const projects = sqliteTable(
   "projects",
@@ -20,12 +22,16 @@ export const projects = sqliteTable(
     // The empty default exists only so SQLite can add the column to a table that already has rows
     // (migration 0001 then copies created_at into it). Every write sets a real time; see DemoRows.
     lastSeenAt: text("last_seen_at").notNull().default(""),
+    // The language the client reads: the PayPal invoice's description and note are written in it. Added by migration
+    // 0007; the default puts every existing copy on English, which keeps their invoices exactly as before.
+    clientLocale: text("client_locale", { enum: LOCALES }).notNull().default("en"),
   },
   (t) => [
     // Cleanup looks up copies by last use every time a new copy is made.
     index("projects_last_seen_idx").on(t.lastSeenAt),
     check("projects_rate_positive", sql`${t.hourlyRateCents} > 0`),
     check("projects_hours_per_day_positive", sql`${t.hoursPerDay} > 0`),
+    check("projects_client_locale_known", sql.raw(`client_locale IN (${LOCALES.map((l) => `'${l}'`).join(", ")})`)),
   ],
 );
 
@@ -116,7 +122,7 @@ export const changeOrders = sqliteTable(
     ),
     check("change_orders_amount_not_negative", sql`${t.amountCents} >= 0`),
     check("change_orders_hours_positive", sql`${t.hours} > 0 AND ${t.extraDays} >= 0`),
-    // Mirrors the domain rules in change-order.ts, so a stray write can't skip them.
+    // What each status must hold. The only copy of these rules: the moves between statuses are in domain/change-order.ts.
     check(
       "change_orders_sent_has_invoice",
       sql`${t.status} <> 'sent' OR (${t.paypalInvoiceId} IS NOT NULL AND ${t.sentAt} IS NOT NULL)`,
@@ -129,13 +135,46 @@ export const changeOrders = sqliteTable(
   ],
 );
 
-// PayPal event ids already handled, so a redelivered webhook changes nothing.
+// PayPal event ids already handled, so a redelivered webhook changes nothing. A row is written in the same batch as
+// the change it caused, so it also means "handled" (processed_at = received_at). The three later columns were added
+// by migration 0004 and are NULL on rows from before it.
 export const webhookEvents = sqliteTable("webhook_events", {
   id: text().primaryKey(),
   eventType: text("event_type").notNull(),
   receivedAt: text("received_at").notNull(),
   processedAt: text("processed_at"),
+  invoiceId: text("invoice_id"),
+  outcome: text().$type<WebhookOutcome>(),
+  // The event's create_time, kept to measure how late PayPal delivered it.
+  eventCreatedAt: text("event_created_at"),
 });
+
+// Every PayPal send the server let through, for the caps per copy and per server (P2-S1, P2-S1b, P2-S5). No foreign
+// key on purpose: a demo reset or the seven-day cleanup deletes the copy's orders, and the count must stay. Rows older
+// than a day are pruned.
+export const paypalSends = sqliteTable(
+  "paypal_sends",
+  {
+    id: integer().primaryKey({ autoIncrement: true }),
+    changeOrderId: text("change_order_id").notNull(),
+    // The copy that sent it. Null only on rows written before the per-copy cap (P5), which age out within a day.
+    projectId: text("project_id"),
+    at: text().notNull(),
+  },
+  (t) => [index("paypal_sends_at_idx").on(t.at), index("paypal_sends_project_idx").on(t.projectId, t.at)],
+);
+
+// Every Claude review the server let through, for the caps per copy and per server. No foreign key, like paypal_sends:
+// a demo reset must not hand a visitor a fresh allowance. Rows older than a day are pruned.
+export const claudeCalls = sqliteTable(
+  "claude_calls",
+  {
+    id: integer().primaryKey({ autoIncrement: true }),
+    projectId: text("project_id").notNull(),
+    at: text().notNull(),
+  },
+  (t) => [index("claude_calls_at_idx").on(t.at), index("claude_calls_project_idx").on(t.projectId, t.at)],
+);
 
 // The steps shown in the activity panel, written in the same batch as the change they describe.
 // No CHECK on kind or actor: later phases add kinds, and SQLite can only change a CHECK by rebuilding the table.

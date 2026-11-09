@@ -1,7 +1,10 @@
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, lt, notExists, or, sql, type SQL } from "drizzle-orm";
 import type { BillingActionResult } from "../../domain/action-result";
+import type { DeliveryOrder } from "../../domain/delivery";
 import { canTransition } from "../../domain/change-order";
+import type { PaymentOrder } from "../../domain/payment";
 import type { ChangeOrderStatus } from "../../domain/types";
+import type { Locale } from "../../i18n/locales";
 import type { Db } from "./client";
 import { changeOrders, projects } from "./schema";
 
@@ -26,6 +29,24 @@ export async function ownedStatus(db: Db, ownerProjectId: string, changeOrderId:
 export const SEND_CLAIM_TTL_MS = 2 * 60 * 1000;
 
 const staleClaimBefore = (now: Date) => new Date(now.getTime() - SEND_CLAIM_TTL_MS).toISOString();
+
+// Orders whose PayPal invoice the client may still pay, or may get in a moment: sent ones, drafts that already hold an
+// invoice id (a send stopped part way, so the client may have it), and drafts a send is under way for. Deleting one
+// would leave a payable invoice with no row for the payment webhook to settle, so a demo reset refuses while its copy
+// has one and the seven-day cleanup skips that copy (server/db/demo.ts).
+export function hasOpenInvoice(now: Date): SQL {
+  return or(
+    eq(changeOrders.status, "sent"),
+    and(eq(changeOrders.status, "draft"), or(isNotNull(changeOrders.paypalInvoiceId), gte(changeOrders.sendClaimedAt, staleClaimBefore(now)))),
+  )!;
+}
+
+// True for a project row of the outer query (projects) that has no such order.
+export function noOpenInvoice(db: Db, now: Date): SQL {
+  return notExists(
+    db.select({ id: changeOrders.id }).from(changeOrders).where(and(eq(changeOrders.projectId, projects.id), hasOpenInvoice(now))),
+  );
+}
 
 interface WaiveCheck {
   status: ChangeOrderStatus;
@@ -88,7 +109,7 @@ export interface BillingOrder {
   amountCents: number;
   status: ChangeOrderStatus;
   paypalInvoiceId: string | null;
-  project: { title: string; clientName: string; clientEmail: string; hourlyRateCents: number; hoursPerDay: number };
+  project: { title: string; clientName: string; clientEmail: string; hourlyRateCents: number; hoursPerDay: number; clientLocale: Locale };
 }
 
 export async function readBillingOrder(db: Db, ownerProjectId: string, changeOrderId: string): Promise<BillingOrder | null> {
@@ -107,6 +128,7 @@ export async function readBillingOrder(db: Db, ownerProjectId: string, changeOrd
         clientEmail: projects.clientEmail,
         hourlyRateCents: projects.hourlyRateCents,
         hoursPerDay: projects.hoursPerDay,
+        clientLocale: projects.clientLocale,
       },
     })
     .from(changeOrders)
@@ -177,4 +199,68 @@ export function markCancelled(db: Db, ownerProjectId: string, changeOrderId: str
     .update(changeOrders)
     .set({ status: "cancelled" })
     .where(and(owned(ownerProjectId, changeOrderId), eq(changeOrders.status, "sent")));
+}
+
+// What settling a payment needs: the order's status, amount and invoice id, and where it lives.
+export interface PayableOrder extends PaymentOrder {
+  projectId: string;
+  sentAt: string | null;
+}
+
+const payableColumns = {
+  id: changeOrders.id,
+  status: changeOrders.status,
+  amountCents: changeOrders.amountCents,
+  paypalInvoiceId: changeOrders.paypalInvoiceId,
+  projectId: changeOrders.projectId,
+  sentAt: changeOrders.sentAt,
+};
+
+// Webhook only: any copy. paypal_invoice_id is UNIQUE, so at most one order matches.
+export async function findOrderByInvoiceId(db: Db, invoiceId: string): Promise<PayableOrder | null> {
+  const [row] = await db.select(payableColumns).from(changeOrders).where(eq(changeOrders.paypalInvoiceId, invoiceId));
+  return row ?? null;
+}
+
+// "Check payment": only through the owner's project id.
+export async function readPayableOrder(db: Db, ownerProjectId: string, changeOrderId: string): Promise<PayableOrder | null> {
+  const [row] = await db.select(payableColumns).from(changeOrders).where(owned(ownerProjectId, changeOrderId));
+  return row ?? null;
+}
+
+// What a payment's unlock step needs (domain/delivery.ts): the project's agreed launch and every order in it, read
+// together. Null if the project is gone.
+export interface LaunchInputs {
+  agreedLaunch: string;
+  orders: DeliveryOrder[];
+}
+
+export async function readLaunchInputs(db: Db, projectId: string): Promise<LaunchInputs | null> {
+  const [projectRows, orders] = await db.batch([
+    db.select({ dueOn: projects.dueOn }).from(projects).where(eq(projects.id, projectId)),
+    db
+      .select({ id: changeOrders.id, title: changeOrders.title, status: changeOrders.status, extraDays: changeOrders.extraDays, paidAt: changeOrders.paidAt })
+      .from(changeOrders)
+      .where(eq(changeOrders.projectId, projectId)),
+  ]);
+  const [project] = projectRows;
+  return project ? { agreedLaunch: project.dueOn, orders } : null;
+}
+
+// sent → paid for this invoice. paid_at = max(?, sent_at), so the CHECK (paid_at >= sent_at) holds even if the
+// server clock went back.
+export function markPaid(db: Db, order: Pick<PayableOrder, "id" | "projectId">, invoiceId: string, paidAt: string) {
+  return db
+    .update(changeOrders)
+    .set({ status: "paid", paidAt: sql`max(${paidAt}, ${changeOrders.sentAt})` })
+    .where(and(owned(order.projectId, order.id), eq(changeOrders.status, "sent"), eq(changeOrders.paypalInvoiceId, invoiceId)));
+}
+
+// draft → sent → paid in one UPDATE, for a draft that already holds this invoice id: the app stopped between sending
+// and saving sent, and the client paid. Clears the send claim; keeps a payer link already stored.
+export function markPaidFromDraft(db: Db, order: Pick<PayableOrder, "id" | "projectId">, invoiceId: string, at: string, payerViewUrl: string | null) {
+  return db
+    .update(changeOrders)
+    .set({ status: "paid", sentAt: at, paidAt: at, payerViewUrl: sql`coalesce(${changeOrders.payerViewUrl}, ${payerViewUrl})`, sendClaimedAt: null })
+    .where(and(owned(order.projectId, order.id), eq(changeOrders.status, "draft"), eq(changeOrders.paypalInvoiceId, invoiceId)));
 }

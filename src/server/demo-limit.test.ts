@@ -149,17 +149,26 @@ describe("AddressLimiter", () => {
 describe("clientAddress", () => {
   const headersOf = (init: Record<string, string>) => new Headers(init);
 
-  it("X-Forwarded-For의 첫 주소를 쓰고, 없으면 X-Real-IP, 둘 다 없으면 null이다", () => {
+  it("웹훅과 같이 CF-Connecting-IP를 먼저 쓰고, 없으면 X-Forwarded-For 첫 주소, 둘 다 없거나 주소 모양이 아니면 null이다", () => {
+    expect(clientAddress(headersOf({ "cf-connecting-ip": "198.51.100.2", "x-forwarded-for": "203.0.113.7" }))).toBe("198.51.100.2");
     expect(clientAddress(headersOf({ "x-forwarded-for": " 203.0.113.7 , 10.0.0.1" }))).toBe("203.0.113.7");
-    expect(clientAddress(headersOf({ "x-real-ip": "198.51.100.2" }))).toBe("198.51.100.2");
     expect(clientAddress(headersOf({}))).toBeNull();
-    expect(clientAddress(headersOf({ "x-forwarded-for": "x".repeat(500) }))).toHaveLength(64);
+    expect(clientAddress(headersOf({ "x-real-ip": "198.51.100.2" }))).toBeNull();
+    expect(clientAddress(headersOf({ "x-forwarded-for": "x".repeat(500) }))).toBeNull();
+  });
+
+  it("한 IPv6 /64 안의 주소는 같은 키로 센다", () => {
+    const a = clientAddress(headersOf({ "cf-connecting-ip": "2001:db8:0:0:1:2:3:4" }));
+    const b = clientAddress(headersOf({ "cf-connecting-ip": "2001:db8::ffff" }));
+
+    expect(a).toBe("2001:db8:0:0::/64");
+    expect(b).toBe(a);
   });
 
   it("next start가 채우는 loopback 주소는 모르는 주소(null)로 본다", () => {
     for (const loopback of ["::1", "127.0.0.1", "::ffff:127.0.0.1"]) {
       expect(clientAddress(headersOf({ "x-forwarded-for": loopback }))).toBeNull();
     }
-    expect(clientAddress(headersOf({ "x-forwarded-for": "1270::1" }))).toBe("1270::1");
+    expect(clientAddress(headersOf({ "x-forwarded-for": "1270::1" }))).toBe("1270:0:0:0::/64");
   });
 });

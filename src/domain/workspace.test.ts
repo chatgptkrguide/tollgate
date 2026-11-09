@@ -30,8 +30,21 @@ describe("작업 화면 합계", () => {
       changeOrdersCents: 90000,
       totalCents: 330000,
       paidCents: 25000,
+      unpaidCents: 65000,
       hasUnpaid: true,
     });
+  });
+
+  it("아직 결제되지 않은 금액은 초안과 발송된 견적만 더하고 무료·취소·결제분은 뺀다", () => {
+    const totals = projectTotals(scope, [
+      order("draft", "draft", 65000),
+      order("sent", "sent", 30000, "2026-11-02T10:00:00Z"),
+      order("paid", "paid", 25000, "2026-10-24T16:00:00Z"),
+      order("waived", "waived", 10000),
+      order("cancelled", "cancelled", 5000, "2026-11-01T10:00:00Z"),
+    ]);
+
+    expect(totals.unpaidCents).toBe(95000);
   });
 
   it("무료 처리한 견적은 변경 포함 합계에서 빠진다", () => {
@@ -55,7 +68,7 @@ describe("작업 화면 합계", () => {
   });
 
   it("견적이 없으면 변경 합계는 0이고 미결제도 없다", () => {
-    expect(projectTotals([], [])).toEqual({ agreedCents: 0, changeOrdersCents: 0, totalCents: 0, paidCents: 0, hasUnpaid: false });
+    expect(projectTotals([], [])).toEqual({ agreedCents: 0, changeOrdersCents: 0, totalCents: 0, paidCents: 0, unpaidCents: 0, hasUnpaid: false });
   });
 });
 

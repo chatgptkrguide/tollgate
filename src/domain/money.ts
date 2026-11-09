@@ -1,6 +1,6 @@
 // Prices come from the freelancer's rate: the model estimates hours, this file does the arithmetic.
 
-const PRICE_STEP_CENTS = 1000; // round change order prices up to the next $10
+export const PRICE_STEP_CENTS = 1000; // round change order prices up to the next $10
 
 // Hours are counted in hundredths so the math stays in integers: 33.2 h × $75 must be $2,490, not $2,500.
 function toCentiHours(hours: number): number {

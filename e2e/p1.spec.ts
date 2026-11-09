@@ -15,7 +15,7 @@ async function waive(page: Page) {
 }
 
 const projectId = (page: Page) => page.getByTestId("workspace").getAttribute("data-project-id");
-const totalText = (page: Page) => page.locator("dl.mt-5 div").last().locator("dd").innerText();
+const totalText = (page: Page) => page.getByTestId("scope-totals").locator("div").last().locator("dd").innerText();
 const orderIds = (page: Page) => page.locator("aside[data-change-order-id]").evaluateAll((els) => els.map((e) => e.getAttribute("data-change-order-id")!));
 
 async function open(browser: Browser): Promise<{ context: BrowserContext; page: Page }> {
@@ -99,7 +99,7 @@ test.describe("P1 인수 시험", () => {
     await expect(page.getByText("Included at no charge").first()).toBeVisible();
     await page.reload();
 
-    await expect(page.getByText("Included at no charge")).toHaveCount(2); // 메모 1 + 합계 패널 1
+    await expect(page.getByText("Included at no charge")).toHaveCount(3); // 티켓 1 + 범위 패널 1 + 납품 패널 1
     await expect(page.getByRole("button", { name: WAIVE, exact: true })).toHaveCount(0);
     await expect(page.getByText(/already updated|Something went wrong/)).toHaveCount(0);
     await context.close();
@@ -151,11 +151,12 @@ test.describe("P1 인수 시험", () => {
   test("P1 (c) 재설정하면 견적 상태와 합계 $3,300이 처음 시드와 같아진다", async ({ browser }) => {
     const { context, page } = await open(browser);
     const seedIds = await orderIds(page);
-    const seedAgreed = await page.locator("dl.mt-5 div").first().locator("dd").innerText();
+    const seedAgreed = await page.getByTestId("scope-totals").locator("div").first().locator("dd").innerText();
     await waive(page);
     await expect(page.getByText("Included at no charge").first()).toBeVisible();
 
     await page.getByRole("button", { name: "Reset demo" }).click();
+    await page.getByRole("button", { name: "Confirm: reset demo" }).click();
 
     await expect(page.getByRole("button", { name: WAIVE, exact: true })).toHaveCount(1);
     expect(await totalText(page)).toBe("$3,300");
@@ -172,15 +173,34 @@ test.describe("P1 인수 시험", () => {
     await expect(page.getByText("Included at no charge").first()).toBeVisible();
 
     const reset = page.getByRole("button", { name: "Reset demo" });
+    const confirm = page.getByRole("button", { name: "Confirm: reset demo" });
     await reset.click();
+    await confirm.click();
     await expect(page.getByRole("button", { name: WAIVE, exact: true })).toHaveCount(1);
     await reset.click();
+    await confirm.click();
     await page.waitForTimeout(500);
     await page.reload();
 
     await expect(page.getByRole("button", { name: WAIVE, exact: true })).toHaveCount(1);
     expect(await totalText(page)).toBe("$3,300");
     expect(await projectId(page)).toBe(id);
+    await context.close();
+  });
+
+  test("P1 (c) 재설정은 확인을 거치고, 'Keep my changes'를 누르면 아무것도 바뀌지 않는다", async ({ browser }) => {
+    const { context, page } = await open(browser);
+    await waive(page);
+    await expect(page.getByText("Included at no charge").first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Reset demo" }).click();
+    await expect(page.getByText("This deletes every change you made to this demo")).toBeVisible();
+    await page.getByRole("button", { name: "Keep my changes" }).click();
+
+    await expect(page.getByRole("button", { name: "Reset demo" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Confirm: reset demo" })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByText("Included at no charge").first()).toBeVisible();
     await context.close();
   });
 
@@ -209,9 +229,10 @@ test.describe("P1 인수 시험", () => {
     await waive(a.page);
     await expect(a.page.getByText("Included at no charge").first()).toBeVisible();
     const aProject = await projectId(a.page);
+    await b.page.getByRole("button", { name: "Reset demo" }).click(); // forge after this click: React rewrites the value on re-render
     await b.page.locator("form[data-action='reset-demo'] input[name='projectId']").evaluate((el, id) => ((el as HTMLInputElement).value = id!), aProject);
 
-    await b.page.getByRole("button", { name: "Reset demo" }).click();
+    await b.page.getByRole("button", { name: "Confirm: reset demo" }).click();
 
     await expect(b.page.getByText(FORGED)).toBeVisible();
     await a.page.reload();
@@ -245,14 +266,14 @@ test.describe("P1 인수 시험", () => {
   });
 
   for (const [name, width, height] of [["desktop", 1440, 900], ["mobile", 390, 844]] as const) {
-    test(`P1 (f) ${name} ${width}px에서 여백 메모와 버튼이 모두 보이고 표시 밑줄이 끊기지 않는다`, async ({ browser }) => {
+    test(`P1 (f) ${name} ${width}px에서 티켓과 버튼이 모두 보이고 표시 밑줄이 끊기지 않는다`, async ({ browser }) => {
       const context = await browser.newContext({ viewport: { width, height } }); // 애니메이션 켠 채로
       const page = await context.newPage();
       await page.goto("/");
       await expect(page.getByTestId("workspace")).toBeVisible();
-      await page.waitForTimeout(1000); // 표시 그리기 520ms + 메모 등장 420+260ms
+      await page.waitForTimeout(1000); // 표시 그리기 500ms
 
-      const notes = page.locator("aside.margin-note");
+      const notes = page.locator("aside.ticket");
       await expect(notes).toHaveCount(2);
       const targets = [
         ...(await notes.all()),
@@ -263,13 +284,14 @@ test.describe("P1 인수 시험", () => {
       expect(targets.length).toBe(5);
       for (const t of targets) {
         await expect(t).toBeVisible();
+        await t.scrollIntoViewIfNeeded(); // 폰에서는 티켓이 가로로 넘기는 줄에 있다
         const box = (await t.boundingBox())!;
         expect(box.width).toBeGreaterThan(0);
         expect(box.height).toBeGreaterThan(0);
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(width + 0.5);
       }
-      // 메모는 등장 애니메이션이 끝나 완전히 불투명하다(발송 버튼은 설계상 흐리게 비활성이라 제외)
+      // 티켓은 완전히 불투명하다(발송 버튼은 설계상 흐리게 비활성이라 제외)
       for (const n of await notes.all()) expect(await n.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
       // 가로 스크롤이 없다
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);

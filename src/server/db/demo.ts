@@ -3,6 +3,7 @@ import { and, count, eq, gt, inArray, lt, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { locateFindings } from "../../domain/finding";
 import { extraDaysForHours, priceForHours } from "../../domain/money";
+import { hasOpenInvoice, noOpenInvoice } from "./change-orders";
 import type { Db } from "./client";
 import { isUniqueViolation } from "./errors";
 import { activityEvents, changeOrders, findings, messages, projects, scopeItems } from "./schema";
@@ -25,7 +26,8 @@ const demoProject = {
   hoursPerDay: HOURS_PER_DAY,
   agreedOn: "2026-10-21",
   dueOn: "2026-11-15",
-};
+  clientLocale: "en", // Maya writes in English; a visitor can switch it to see the invoice in another language
+} as const;
 
 const demoScope = [
   { title: "Landing page", amountCents: 90000 },
@@ -221,21 +223,55 @@ export async function countCopiesCreatedSince(db: Db, since: Date): Promise<numb
   return copies;
 }
 
-// Puts the copy back to the seed in one batch: same project id, fresh child ids, created and last seen now.
-export async function resetDemoCopy(db: Db, projectId: string, now: Date): Promise<void> {
-  await db.batch([
-    ...deleteProjectStatements(db, (column) => eq(column, projectId)),
-    ...insertStatements(db, demoRows(projectId, now)),
-  ]);
+// Whether the copy exists. The reset action asks first: resetDemoCopy also writes a copy that isn't there, so a
+// visitor shown the read-only preview (no copy, a new one refused) could otherwise get one past the limits.
+export async function demoCopyExists(db: Db, projectId: string): Promise<boolean> {
+  const [row] = await db.select({ id: projects.id }).from(projects).where(eq(projects.id, projectId)).limit(1);
+  return row !== undefined;
 }
 
-// Deletes copies nobody has opened for longer than maxAgeMs, with all their rows. Returns how many.
+// Puts the copy back to the seed in one batch: same project id, fresh child ids, created and last seen now.
+// Refused ("invoice_open", nothing changed) while the copy has an order with an invoice the client may still pay.
+// The open invoice is looked up first, so the usual refusal never depends on how the database reports an error
+// (Turso's remote errors can arrive without the extended code isUniqueViolation reads). The same check also sits in
+// every delete of the batch as a backstop: if a send claims an order between the lookup and the batch, nothing is
+// deleted, the project insert hits the existing id and the batch rolls back whole, so the send still wins. A failed
+// batch is looked up once more, so that race answers invoice_open whatever error came back.
+export async function resetDemoCopy(db: Db, projectId: string, now: Date): Promise<"reset" | "invoice_open"> {
+  if (await hasOpenInvoiceIn(db, projectId, now)) return "invoice_open";
+  const resettable = db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), noOpenInvoice(db, now)));
+  try {
+    await db.batch([
+      ...deleteProjectStatements(db, (column) => inArray(column, resettable)),
+      ...insertStatements(db, demoRows(projectId, now)),
+    ]);
+  } catch (error) {
+    if (isUniqueViolation(error) || (await hasOpenInvoiceIn(db, projectId, now))) return "invoice_open";
+    throw error;
+  }
+  return "reset";
+}
+
+async function hasOpenInvoiceIn(db: Db, projectId: string, now: Date): Promise<boolean> {
+  const [open] = await db
+    .select({ id: changeOrders.id })
+    .from(changeOrders)
+    .where(and(eq(changeOrders.projectId, projectId), hasOpenInvoice(now)))
+    .limit(1);
+  return open !== undefined;
+}
+
+
+// Deletes copies nobody has opened for longer than maxAgeMs, with all their rows. Returns how many. A copy with an
+// invoice the client may still pay is kept, so a late payment still finds its order; it goes once that order is paid
+// or cancelled.
 export async function deleteExpiredCopies(db: Db, now: Date, maxAgeMs: number = DEMO_COPY_MAX_AGE_MS): Promise<number> {
   const cutoff = new Date(now.getTime() - maxAgeMs).toISOString();
+  const isExpired = and(lt(projects.lastSeenAt, cutoff), noOpenInvoice(db, now));
   // A subquery, not a list read beforehand: a copy opened between the read and the delete must survive.
-  const expired = db.select({ id: projects.id }).from(projects).where(lt(projects.lastSeenAt, cutoff));
+  const expired = db.select({ id: projects.id }).from(projects).where(isExpired);
   const [[{ copies }]] = await db.batch([
-    db.select({ copies: count() }).from(projects).where(lt(projects.lastSeenAt, cutoff)),
+    db.select({ copies: count() }).from(projects).where(isExpired),
     ...deleteProjectStatements(db, (column) => inArray(column, expired)),
   ]);
   return copies;

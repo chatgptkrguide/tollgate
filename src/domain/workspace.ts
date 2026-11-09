@@ -1,4 +1,5 @@
-import { isBillable } from "./change-order";
+import { isBillable, isUnpaid } from "./change-order";
+import type { DeliveryPlan } from "./delivery";
 import { sumCents } from "./money";
 import type { ChangeOrder, Finding, Message, Project, ScopeItem } from "./types";
 
@@ -16,8 +17,9 @@ export interface ThreadMessage extends Message {
 export interface ProjectTotals {
   agreedCents: number; // the agreed scope
   changeOrdersCents: number; // draft, sent and paid orders; waived and cancelled are shown but not counted
-  totalCents: number; // agreed + change orders ("With changes", "Total")
+  totalCents: number; // agreed + change orders ("Total with changes", "Total")
   paidCents: number; // paid orders only
+  unpaidCents: number; // draft and sent orders: billed or to be billed, not paid yet
   hasUnpaid: boolean; // a draft or sent order is still open
 }
 
@@ -27,6 +29,7 @@ export interface WorkspaceData {
   messages: readonly ThreadMessage[]; // by sentAt
   changeOrders: readonly ChangeOrder[]; // by message sentAt, then quoteStart, then creation (oldest first); every status
   totals: ProjectTotals;
+  delivery: DeliveryPlan; // the agreed launch and how paid change orders moved it
 }
 
 export function projectTotals(
@@ -40,7 +43,8 @@ export function projectTotals(
     changeOrdersCents,
     totalCents: agreedCents + changeOrdersCents,
     paidCents: sumCents(orders.filter((o) => o.status === "paid").map((o) => o.amountCents)),
-    hasUnpaid: orders.some((o) => o.status === "draft" || o.status === "sent"),
+    unpaidCents: sumCents(orders.filter(isUnpaid).map((o) => o.amountCents)),
+    hasUnpaid: orders.some(isUnpaid),
   };
 }
 

@@ -1,5 +1,7 @@
 import "server-only";
 import { asc, eq, sql } from "drizzle-orm";
+import { deliveryPlan } from "@/domain/delivery";
+import { DEFAULT_LOCALE } from "@/i18n/locales";
 import { displayedOrder, projectTotals, type WorkspaceData } from "@/domain/workspace";
 import type { ChangeOrder, Finding, Message, Project, ScopeItem } from "@/domain/types";
 import type { Db } from "./client";
@@ -16,6 +18,7 @@ const projectColumns = {
   hoursPerDay: projects.hoursPerDay,
   agreedOn: projects.agreedOn,
   dueOn: projects.dueOn,
+  clientLocale: projects.clientLocale,
 };
 
 const findingColumns = {
@@ -94,6 +97,7 @@ function assembleWorkspace(
     hoursPerDay: projectRow.hoursPerDay,
     agreedOn: projectRow.agreedOn,
     dueOn: projectRow.dueOn,
+    clientLocale: projectRow.clientLocale,
   };
   const items: ScopeItem[] = scopeRows.map((s) => ({
     id: s.id,
@@ -125,6 +129,7 @@ function assembleWorkspace(
     messages: thread,
     changeOrders: orders,
     totals: projectTotals(items, orders),
+    delivery: deliveryPlan(project.dueOn, orders),
   };
 }
 
@@ -134,7 +139,7 @@ function assembleWorkspace(
 export function previewWorkspace(projectId: string, now: Date): WorkspaceData {
   const rows = demoRows(projectId, now);
   return assembleWorkspace(
-    rows.project,
+    { ...rows.project, clientLocale: rows.project.clientLocale ?? DEFAULT_LOCALE },
     rows.scopeItems,
     rows.messages,
     rows.findings,
