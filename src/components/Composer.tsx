@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState, type MouseEvent } from "react";
+import { useActionState, useEffect, useRef, useState, type MouseEvent } from "react";
 import { reviewMessage } from "@/app/actions";
+import { revealNewTicket, ticketIdsOnScreen } from "@/components/reveal-ticket";
 import type { ReviewActionResult } from "@/domain/action-result";
 import { MAX_REVIEW_MESSAGE_CHARS } from "@/domain/review-limit";
 import { formatNumber } from "@/i18n/format";
@@ -30,7 +31,10 @@ function resultText(locale: Locale, state: ReviewActionResult | null): string {
 // message that failed to check should stay there to try again.
 export function Composer({ client, blockedReason, locale }: ComposerProps) {
   const [text, setText] = useState("");
+  // The tickets on screen when Check scope was pressed, so the one it prints can be told apart.
+  const ticketsBefore = useRef<ReadonlySet<string>>(new Set());
   const [state, formAction, pending] = useActionState(async (prev: ReviewActionResult | null, formData: FormData) => {
+    ticketsBefore.current = new Set(ticketIdsOnScreen());
     let result: ReviewActionResult;
     try {
       result = await reviewMessage(prev, formData);
@@ -43,6 +47,12 @@ export function Composer({ client, blockedReason, locale }: ComposerProps) {
     if (result.ok) setText((current) => (current === sent ? "" : current));
     return result;
   }, null);
+  // A marked request printed a ticket at the top of the tickets column: show it (on a phone it is far above) and move
+  // focus to it. Runs once per answer.
+  useEffect(() => {
+    if (!state?.ok || state.marked === 0) return;
+    return revealNewTicket(ticketsBefore.current);
+  }, [state]);
   // Pressing Check scope while checking is off says why in the result line, so the press is never a dead click.
   const [blockedPressed, setBlockedPressed] = useState(false);
   const off = pending || blockedReason !== null;
