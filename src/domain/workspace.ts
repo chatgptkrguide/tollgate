@@ -27,7 +27,7 @@ export interface WorkspaceData {
   project: Project;
   scopeItems: readonly ScopeItem[]; // by position
   messages: readonly ThreadMessage[]; // by sentAt
-  changeOrders: readonly ChangeOrder[]; // by message sentAt, then quoteStart; every status
+  changeOrders: readonly ChangeOrder[]; // by message sentAt, then quoteStart, then creation (oldest first); every status
   totals: ProjectTotals;
   delivery: DeliveryPlan; // the agreed launch and how paid change orders moved it
 }
@@ -49,12 +49,14 @@ export function projectTotals(
 }
 
 // The order a finding shows: its live one; after a cancel with no new quote, the cancelled one sent last; else none.
+// `orders` comes oldest first (see WorkspaceData), so between cancelled orders sent at the same time, or never sent
+// (voided drafts), the one quoted last wins, never whichever random id happened to sort first.
 export function displayedOrder(orders: readonly ChangeOrder[]): ChangeOrder | null {
   const live = orders.find((o) => o.status !== "cancelled");
   if (live) return live;
   const cancelled = orders.filter((o) => o.status === "cancelled");
   return cancelled.reduce<ChangeOrder | null>(
-    (latest, o) => (latest === null || (o.sentAt ?? "") > (latest.sentAt ?? "") ? o : latest),
+    (latest, o) => (latest === null || (o.sentAt ?? "") >= (latest.sentAt ?? "") ? o : latest),
     null,
   );
 }

@@ -27,6 +27,9 @@ export interface WorkspaceProps {
   activity: readonly ActivityEvent[]; // oldest first
   sendBlockedReason: string | null; // set when this server has no PayPal keys, so sending and cancelling are off
   reviewBlockedReason: string | null; // set when this server has no Claude key, so checking a message is off
+  // Set when a new copy was refused (demo-limit.ts): data is the seed from memory and nothing can be saved, so the
+  // screen says so, and resetting and the client language are off. The page passes it as both reasons above too.
+  previewReason: string | null;
   locale: Locale; // the screen language of this request (getLocale())
 }
 
@@ -40,12 +43,14 @@ interface TicketEntry {
 interface ProjectHeaderProps {
   data: WorkspaceData;
   client: string;
+  readOnly: boolean;
   locale: Locale;
 }
 
 interface TicketsColumnProps {
   entries: readonly TicketEntry[];
   sendBlockedReason: string | null;
+  readOnly: boolean;
   locale: Locale;
   className?: string;
 }
@@ -83,7 +88,7 @@ function seenSnapshot(data: WorkspaceData, activity: readonly ActivityEvent[]): 
 
 // The whole screen is rendered on the server from the database; only the action forms and the small motion helpers
 // run in the browser.
-export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReason, locale }: WorkspaceProps) {
+export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReason, previewReason, locale }: WorkspaceProps) {
   const { project } = data;
   const client = data.messages.find((m) => m.from === "client")?.author ?? project.clientName;
   const awaitingPayment = data.changeOrders.some((o) => o.status === "sent");
@@ -110,10 +115,16 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
             <div id="locale-slot">
               <LocaleSwitcher locale={locale} label={t(locale, "localeSwitcher.label")} />
             </div>
-            <ResetDemo projectId={project.id} locale={locale} />
+            {previewReason === null && <ResetDemo projectId={project.id} locale={locale} />}
           </div>
         </div>
       </div>
+
+      {previewReason !== null && (
+        <p role="status" data-testid="preview-notice" className="border-b border-line bg-stop-wash">
+          <span className="mx-auto block max-w-[1280px] px-4 py-3 text-[14px] leading-relaxed font-semibold sm:px-8">{previewReason}</span>
+        </p>
+      )}
 
       <DemoGuide
         client={client}
@@ -122,12 +133,18 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
         defaultOpen={activity.length === 0}
         locale={locale}
       />
-      <ProjectHeader data={data} client={client} locale={locale} />
+      <ProjectHeader data={data} client={client} readOnly={previewReason !== null} locale={locale} />
 
       {/* Tickets come first in the page, so on a phone they sit right under the total; on a wide screen they head the
           right column and the conversation spans both rows on the left. */}
       <main className="mx-auto grid max-w-[1280px] gap-6 px-4 pt-6 pb-16 sm:px-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-8">
-        <TicketsColumn entries={ticketEntries(data)} sendBlockedReason={sendBlockedReason} locale={locale} className="lg:col-start-2 lg:row-start-1" />
+        <TicketsColumn
+          entries={ticketEntries(data)}
+          sendBlockedReason={sendBlockedReason}
+          readOnly={previewReason !== null}
+          locale={locale}
+          className="lg:col-start-2 lg:row-start-1"
+        />
         <Conversation
           messages={data.messages}
           clientName={project.clientName}
@@ -146,7 +163,7 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
   );
 }
 
-function ProjectHeader({ data, client, locale }: ProjectHeaderProps) {
+function ProjectHeader({ data, client, readOnly, locale }: ProjectHeaderProps) {
   const { project, totals } = data;
   const tone = totals.hasUnpaid ? "stop" : "go";
 
@@ -165,6 +182,7 @@ function ProjectHeader({ data, client, locale }: ProjectHeaderProps) {
               label={t(locale, "clientLocale.label")}
               help={t(locale, "clientLocale.help")}
               saveFailed={t(locale, "clientLocale.saveFailed")}
+              disabled={readOnly}
             />
           </div>
         </div>
@@ -193,7 +211,7 @@ function ProjectHeader({ data, client, locale }: ProjectHeaderProps) {
   );
 }
 
-function TicketsColumn({ entries, sendBlockedReason, locale, className = "" }: TicketsColumnProps) {
+function TicketsColumn({ entries, sendBlockedReason, readOnly, locale, className = "" }: TicketsColumnProps) {
   const open = entries.filter((e) => isUnpaid(e.order)).length;
 
   return (
@@ -216,7 +234,7 @@ function TicketsColumn({ entries, sendBlockedReason, locale, className = "" }: T
         <ol className="ticket-row -mx-4 -mt-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pt-0 pb-3 sm:-mx-8 sm:px-8 lg:mx-0 lg:flex-col lg:gap-4 lg:overflow-visible lg:px-2 lg:pb-0">
           {entries.map((e) => (
             <li key={e.finding.id} className="w-[min(360px,calc(100vw-56px))] shrink-0 snap-start lg:w-auto">
-              <Ticket order={e.order} finding={e.finding} author={e.author} askedOn={e.askedOn} sendBlockedReason={sendBlockedReason} locale={locale} />
+              <Ticket order={e.order} finding={e.finding} author={e.author} askedOn={e.askedOn} sendBlockedReason={sendBlockedReason} readOnly={readOnly} locale={locale} />
             </li>
           ))}
         </ol>

@@ -20,6 +20,7 @@ export const en = {
   page: {
     sendBlocked: "PayPal sandbox keys aren't set on this server, so nothing can be sent.",
     reviewBlocked: "Claude isn't set up on this server, so messages can't be checked.",
+    previewOnly: "Too many new demos were started recently, so this one is view-only and nothing is saved. Try again later.",
     missingVisitor: "Reload the page to start your demo.",
   },
   skeleton: {

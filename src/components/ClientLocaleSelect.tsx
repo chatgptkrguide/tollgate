@@ -10,12 +10,13 @@ export interface ClientLocaleSelectProps {
   label: string; // t(locale, "clientLocale.label")
   help: string; // t(locale, "clientLocale.help")
   saveFailed: string; // t(locale, "clientLocale.saveFailed")
+  disabled: boolean; // the read-only preview (no copy exists, so there is nothing to save to)
 }
 
 // The language the client reads: new PayPal invoices for this project are written in it. A native <select>, each
 // language written in itself. The server action saves it and refreshes the page; a refusal puts the old value back
 // and says so. The screen language (LocaleSwitcher) is a separate choice.
-export function ClientLocaleSelect({ projectId, clientLocale, label, help, saveFailed }: ClientLocaleSelectProps) {
+export function ClientLocaleSelect({ projectId, clientLocale, label, help, saveFailed, disabled }: ClientLocaleSelectProps) {
   const id = useId();
   const helpId = useId();
   const [pending, startTransition] = useTransition();
@@ -59,6 +60,7 @@ export function ClientLocaleSelect({ projectId, clientLocale, label, help, saveF
         onChange={onChange}
         aria-describedby={helpId}
         aria-busy={pending || undefined}
+        disabled={disabled}
         className="select select-quiet sm:text-[14px]"
       >
         {LOCALES.map((l) => (

@@ -11,6 +11,7 @@ export interface TicketProps {
   author: string; // first name of the client who asked for it
   askedOn: string; // ISO date of their message
   sendBlockedReason: string | null;
+  readOnly: boolean; // the read-only preview: see ChangeOrderActions
   locale: Locale;
 }
 
@@ -37,7 +38,7 @@ function gateOf(locale: Locale, order: ChangeOrder): Gate {
 // One change order as a toll ticket: number and lamp, what and how much, where it came from, then a perforation and
 // the stub with the barrier and the buttons. The element stays an aside[data-change-order-id] with role="note":
 // the e2e tests and the guide's links find tickets that way.
-export function Ticket({ order, finding, author, askedOn, sendBlockedReason, locale }: TicketProps) {
+export function Ticket({ order, finding, author, askedOn, sendBlockedReason, readOnly, locale }: TicketProps) {
   const tone = statusTone[order.status];
   const gate = gateOf(locale, order);
   const number = ticketNumber(order.id);
@@ -117,6 +118,7 @@ export function Ticket({ order, finding, author, askedOn, sendBlockedReason, loc
         <ChangeOrderActions
           order={{ id: order.id, status: order.status, payerViewUrl: order.payerViewUrl, hasInvoice: order.paypalInvoiceId !== null }}
           sendBlockedReason={sendBlockedReason}
+          readOnly={readOnly}
           statusLineId={statusLineId(order)}
           locale={locale}
         />

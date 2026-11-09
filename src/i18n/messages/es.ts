@@ -8,6 +8,7 @@ export const es = {
   page: {
     sendBlocked: "Este servidor no tiene las claves de sandbox de PayPal, así que no se puede enviar nada.",
     reviewBlocked: "Claude no está configurado en este servidor, así que no se pueden revisar mensajes.",
+    previewOnly: "Se iniciaron demasiadas demos nuevas hace poco, así que esta es solo de lectura y no se guarda nada. Inténtalo más tarde.",
     missingVisitor: "Recarga la página para empezar la demo.",
   },
   skeleton: {

@@ -8,6 +8,7 @@ export const ko = {
   page: {
     sendBlocked: "이 서버에 PayPal 샌드박스 키가 없어서 아무것도 보낼 수 없어요.",
     reviewBlocked: "이 서버에 Claude가 설정되지 않아 메시지를 확인할 수 없어요.",
+    previewOnly: "최근에 새 데모가 너무 많이 시작돼서 이 데모는 보기만 할 수 있고 아무것도 저장되지 않아요. 잠시 뒤에 다시 시도해 주세요.",
     missingVisitor: "페이지를 새로고침하면 데모가 시작돼요.",
   },
   skeleton: {

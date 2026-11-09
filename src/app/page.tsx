@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { connection } from "next/server";
 import { Suspense, type ReactElement } from "react";
 import { Workspace } from "@/components/Workspace";
@@ -9,6 +10,7 @@ import { listActivity } from "@/server/db/activity";
 import { getDb } from "@/server/db/client";
 import { openVisitorWorkspace } from "@/server/db/queries";
 import { env } from "@/server/env";
+import { clientAddress, demoCopyGate } from "@/server/demo-limit";
 import { paypalConfig } from "@/server/paypal/token";
 import { readVisitorId } from "@/server/session";
 
@@ -38,6 +40,7 @@ async function LocalizedSkeleton(): Promise<ReactElement> {
 }
 
 // Reads the visitor cookie, creates the visitor's own copy on the first visit, then renders it from the database.
+// Past the limits on new copies it renders the seed from memory instead.
 // Without sandbox keys (a judge running it locally, the phase 1 browser tests) sending stays off and says why.
 async function VisitorWorkspace(): Promise<ReactElement> {
   const [visitorId, locale] = await Promise.all([readVisitorId(), getLocale()]);
@@ -47,7 +50,13 @@ async function VisitorWorkspace(): Promise<ReactElement> {
   await connection();
 
   const db = getDb();
-  const data = await openVisitorWorkspace(db, visitorId, new Date());
+  const mayCreate = demoCopyGate(clientAddress(await headers()));
+  const { data, preview } = await openVisitorWorkspace(db, visitorId, new Date(), { mayCreate });
+  if (preview) {
+    // The seed from memory: no row exists, so there is no activity to read and every action would answer not_found.
+    const reason = t(locale, "page.previewOnly");
+    return <Workspace data={data} activity={[]} sendBlockedReason={reason} reviewBlockedReason={reason} previewReason={reason} locale={locale} />;
+  }
   const activity = await listActivity(db, data.project.id);
   return (
     <Workspace
@@ -55,6 +64,7 @@ async function VisitorWorkspace(): Promise<ReactElement> {
       activity={activity}
       sendBlockedReason={paypalConfig() ? null : t(locale, "page.sendBlocked")}
       reviewBlockedReason={env().ANTHROPIC_API_KEY ? null : t(locale, "page.reviewBlocked")}
+      previewReason={null}
       locale={locale}
     />
   );

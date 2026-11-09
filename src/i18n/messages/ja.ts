@@ -8,6 +8,7 @@ export const ja = {
   page: {
     sendBlocked: "このサーバーには PayPal サンドボックスのキーが設定されていないため、送信できません。",
     reviewBlocked: "このサーバーには Claude が設定されていないため、メッセージを確認できません。",
+    previewOnly: "最近、新しいデモが多く開始されたため、このデモは閲覧のみで、何も保存されません。しばらくしてからもう一度お試しください。",
     missingVisitor: "ページを再読み込みするとデモが始まります。",
   },
   skeleton: {

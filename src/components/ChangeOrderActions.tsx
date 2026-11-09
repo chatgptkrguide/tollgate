@@ -16,6 +16,8 @@ export interface ActionsOrder extends Pick<ChangeOrder, "id" | "status" | "payer
 export interface ChangeOrderActionsProps {
   order: ActionsOrder;
   sendBlockedReason: string | null; // why PayPal actions are off (no keys on this server); null when they work
+  // The read-only preview (no copy exists): including for free and quoting again are off too, with the same reason.
+  readOnly: boolean;
   statusLineId: string; // the note's status line (role="status", tabIndex -1), focused after an action succeeds
   locale: Locale;
 }
@@ -60,7 +62,7 @@ function useFocusOnSuccess(state: ActionResult | BillingActionResult | null, sta
 // The buttons under a change order: send or include at no charge (draft), send again (a draft PayPal already has an
 // invoice for), the client's PayPal page, check payment and cancel (sent), quote again (cancelled). The browser sends
 // only the order id; the server decides the rest.
-export function ChangeOrderActions({ order, sendBlockedReason, statusLineId, locale }: ChangeOrderActionsProps) {
+export function ChangeOrderActions({ order, sendBlockedReason, readOnly, statusLineId, locale }: ChangeOrderActionsProps) {
   // Every hook stays here, whatever the status, so the component stays mounted through the refresh after an
   // action and can move focus once the new status arrives.
   const [waiveState, waiveAction, waiving] = useActionState(waiveChangeOrder, null);
@@ -186,7 +188,15 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId, loc
                   </button>
                 </>
               ) : (
-                <button key="include" ref={includeRef} type="button" onClick={() => openConfirm("waive", keepRef)} className={SECONDARY}>
+                <button
+                  key="include"
+                  ref={includeRef}
+                  type="button"
+                  aria-disabled={readOnly || undefined}
+                  aria-describedby={readOnly && blocked ? reasonId : undefined}
+                  onClick={readOnly ? undefined : () => openConfirm("waive", keepRef)}
+                  className={`${SECONDARY} aria-disabled:cursor-not-allowed`}
+                >
                   {t(locale, "changeOrder.includeFree")}
                 </button>
               )}
@@ -308,11 +318,18 @@ export function ChangeOrderActions({ order, sendBlockedReason, statusLineId, loc
       <div className="mt-4">
         <form action={requoteAction} data-action="requote">
           <input type="hidden" name="changeOrderId" value={order.id} />
-          <button type="submit" aria-disabled={requoting || undefined} onClick={submitOnce(requoting)} className={SECONDARY}>
+          <button
+            type="submit"
+            aria-disabled={readOnly || requoting || undefined}
+            aria-describedby={readOnly && blocked ? reasonId : undefined}
+            onClick={submitOnce(readOnly || requoting)}
+            className={`${SECONDARY} ${readOnly ? "aria-disabled:cursor-not-allowed" : "aria-disabled:cursor-wait"}`}
+          >
             {requoting ? t(locale, "changeOrder.quoting") : t(locale, "changeOrder.quoteAgain")}
             {requoting && <Busy />}
           </button>
         </form>
+        {readOnly && reason}
         {sendState?.ok === false && sendState.error === "invoice_void" && errorFor(sendState)}
         {errorFor(requoteState)}
       </div>
