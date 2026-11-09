@@ -36,6 +36,7 @@ async function paypal(method: string, path: string, body?: unknown) {
 async function rows<T = Record<string, unknown>>(sql: string, args: Array<string | number> = []): Promise<T[]> {
   const db = createClient({ url: DB_URL });
   try {
+    await db.execute("PRAGMA busy_timeout = 5000"); // the server may be writing the same file (SQLITE_BUSY otherwise)
     return (await db.execute({ sql, args })).rows as unknown as T[];
   } finally {
     db.close();

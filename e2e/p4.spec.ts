@@ -58,6 +58,7 @@ test("사본에 작업 기록이 생기면 데모 안내가 접힌 채로 열린
   const projectId = await page.getByTestId("workspace").getAttribute("data-project-id");
   // Nothing on this server (no Claude, no PayPal) writes activity, so the step goes straight into its database.
   const db = createClient({ url: "file:data/e2e.db" });
+  await db.execute("PRAGMA busy_timeout = 5000"); // the server may be writing the same file (SQLITE_BUSY otherwise)
   await db.execute({
     sql: "INSERT INTO activity_events (project_id, change_order_id, kind, actor, summary, detail, at) VALUES (?, NULL, 'message_read', 'claude', 'Read a message', NULL, ?)",
     args: [projectId, new Date().toISOString()],
