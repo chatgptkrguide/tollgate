@@ -38,18 +38,17 @@ Languages: the screen reads in English, Korean, Japanese, Spanish or Portuguese 
 
 ## Try it
 
-**Testing for judges:** everything below runs on the live demo with no sign-up. The only private detail, the PayPal sandbox buyer login for step 3, is in the testing-instructions field of our Devpost submission.
+**Testing for judges:** everything below runs on the live demo with no sign-up, in the same order as the demo video. The only private detail, a PayPal sandbox buyer login for step 4, is in the testing-instructions field of our Devpost submission; any PayPal sandbox personal account you already have works too.
 
 1. Open the [live demo](https://tollgate-ratq.onrender.com). Each visitor gets a private sandbox copy of a demo project, so you can't break anyone else's. **Reset demo** puts your copy back. If too many new demos were started recently (10 from one address in an hour, or 500 on the server in a day), a new visitor sees the demo read-only and nothing is saved until then.
-2. Open the change order for the loyalty page and press **Send change order**. Tollgate creates and sends a PayPal sandbox invoice. One copy can send up to 20 invoices per 24 hours.
-3. Pay it as the client. Use the invoice's payer link and sign in with a PayPal sandbox personal (buyer) account. The credentials are in the private testing-instructions field of our Devpost submission; they are not in this repository.
-4. Return to Tollgate. The change order shows **Paid** and the total turns green. If the webhook is late, press **Check payment**.
-
-Claude scope review is live on the demo. Paste a new client message into the message box (or press **Use a sample message**), then press **Check scope**. Claude marks the phrases the agreed scope doesn't cover and adds a ticket with its hours; the app prices it from the hourly rate. Nothing is sent until you press **Send change order**. Each copy can run 10 checks a day.
+2. **Claude checks a message.** Paste a new client message into the message box (or press **Use a sample message**), then press **Check scope**. Claude marks the phrases the agreed scope doesn't cover and prints a ticket with its hours; the app prices it from the hourly rate. Nothing is sent yet. Each copy can run 10 checks a day.
+3. **Send the change order.** On that ticket (or the loyalty page ticket already in the demo), press **Send change order**. Tollgate creates and sends a PayPal sandbox invoice. One copy can send up to 20 invoices per 24 hours.
+4. **Pay it as the client.** Open the client's PayPal page from the ticket and pay with a PayPal sandbox personal (buyer) account. The credentials are not in this repository.
+5. **Back in Tollgate:** the ticket shows **Paid**, its gate lifts, and the Delivery panel unlocks the work and moves the launch date. The project total turns green once nothing is left unpaid (send, pay or include the other ticket at no charge). If the webhook is late, press **Check payment**.
 
 ![Claude marking "add a blog so we can post seasonal drinks" in a new client message on the live demo](docs/images/screen-claude-review-live.png)
 
-*The live demo after Check scope. The data is fictional demo data.*
+*Step 2 on the live demo. The data is fictional demo data.*
 
 ## How PayPal is used
 
