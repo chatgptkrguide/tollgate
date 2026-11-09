@@ -1,7 +1,13 @@
 {
   "name": "tollgate",
   "version": "0.1.0",
+  "description": "Catch scope creep in client messages and bill it with a PayPal invoice before you do the extra work.",
+  "license": "MIT",
+  "repository": "github:chatgptkrguide/tollgate",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
