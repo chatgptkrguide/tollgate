@@ -41,11 +41,11 @@ Languages: the screen reads in English, Korean, Japanese, Spanish or Portuguese 
 3. Pay it as the client. Use the invoice's payer link and sign in with a PayPal sandbox personal (buyer) account. The credentials are in the private testing-instructions field of our Devpost submission; they are not in this repository.
 4. Return to Tollgate. The change order shows **Paid** and the total turns green. If the webhook is late, press **Check payment**.
 
-Claude scope review: it works in a local run with a key (see below). On the public demo it is off for now, so the message box shows why. [TODO before submit: update this line once a key is set on the server.]
+Claude scope review is live on the demo. Paste a new client message into the message box (or press **Use a sample message**), then press **Check scope**. Claude marks the phrases the agreed scope doesn't cover and adds a ticket with its hours; the app prices it from the hourly rate. Nothing is sent until you press **Send change order**. Each copy can run 10 checks a day.
 
-![Claude marking extra work in a client message (local run with a Claude key)](docs/images/screen-r2-claude-review-local.png)
+![Claude marking "add a blog so we can post seasonal drinks" in a new client message on the live demo](docs/images/screen-claude-review-live.png)
 
-*Local run with a Claude key. The data is fictional demo data.*
+*The live demo after Check scope. The data is fictional demo data.*
 
 ## How PayPal is used
 
