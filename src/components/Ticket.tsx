@@ -37,7 +37,8 @@ function gateOf(locale: Locale, order: ChangeOrder): Gate {
 
 // One change order as a toll ticket: number and lamp, what and how much, where it came from, then a perforation and
 // the stub with the barrier and the buttons. The element stays an aside[data-change-order-id] with role="note":
-// the e2e tests and the guide's links find tickets that way.
+// the e2e tests and the guide's links find tickets that way. It can take focus (tabIndex -1, named by its title) so
+// a ticket Check scope printed off screen can be brought to (reveal-ticket).
 export function Ticket({ order, finding, author, askedOn, sendBlockedReason, readOnly, locale }: TicketProps) {
   const tone = statusTone[order.status];
   const gate = gateOf(locale, order);
@@ -49,6 +50,7 @@ export function Ticket({ order, finding, author, askedOn, sendBlockedReason, rea
       id={noteId(order)}
       role="note"
       aria-labelledby={titleId(order)}
+      tabIndex={-1}
       className="ticket scroll-mt-24 scroll-ml-4"
       data-status={order.status}
       data-change-order-id={order.id}
