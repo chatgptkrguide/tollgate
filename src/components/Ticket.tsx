@@ -4,6 +4,7 @@ import type { ChangeOrder, ChangeOrderStatus, Finding } from "@/domain/types";
 import { formatDate, formatMoney } from "@/i18n/format";
 import type { Locale } from "@/i18n/locales";
 import { t } from "@/i18n/t";
+import { env } from "@/server/env";
 
 export interface TicketProps {
   order: ChangeOrder;
@@ -121,6 +122,7 @@ export function Ticket({ order, finding, author, askedOn, sendBlockedReason, rea
           order={{ id: order.id, status: order.status, payerViewUrl: order.payerViewUrl, hasInvoice: order.paypalInvoiceId !== null }}
           sendBlockedReason={sendBlockedReason}
           readOnly={readOnly}
+          sandbox={env().PAYPAL_ENV === "sandbox"} // the simulated-payment shortcut; its action checks again
           statusLineId={statusLineId(order)}
           locale={locale}
         />

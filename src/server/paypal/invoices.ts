@@ -203,6 +203,40 @@ export async function cancelInvoice(client: PayPalClient, invoiceId: string): Pr
   return "cancelled";
 }
 
+export interface RecordedPayment {
+  amountValue: string; // "650.00", the invoice's whole amount
+  date: string; // YYYY-MM-DD
+  note: string;
+}
+
+const PAYPAL_VALUE = /^\d{1,10}\.\d{2}$/;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+// Not a PayPal name: recordPayment's own refusal on a client that isn't the sandbox's.
+export const SANDBOX_ONLY = "SANDBOX_ONLY";
+
+// POST .../{id}/payments: records a payment on the invoice (PayPal's "mark as paid"), method PAYPAL, in USD. Only ever
+// against the sandbox: on any other client it throws before a request is made, so the demo shortcut can never mark a
+// live invoice paid. PayPal answers 200 {"payment_id":"EXTR-…"} and the invoice turns MARKED_AS_PAID once the whole
+// amount is recorded; a second payment on it answers 422 CANNOT_PROCESS_PAYMENTS (sandbox, Nov 10, 2026), reported as
+// "not_payable" so the caller can read the invoice and say why. Any other 422 is a refusal.
+export async function recordPayment(client: PayPalClient, invoiceId: string, payment: RecordedPayment): Promise<"recorded" | "not_payable"> {
+  if (client.environment !== "sandbox") throw new PayPalError("rejected", null, SANDBOX_ONLY, null);
+  if (!PAYPAL_VALUE.test(payment.amountValue) || !DATE_ONLY.test(payment.date)) throw new RangeError("a recorded payment needs an amount like 650.00 and a YYYY-MM-DD date");
+  const body = {
+    method: "PAYPAL",
+    payment_date: payment.date,
+    amount: { currency_code: "USD", value: payment.amountValue },
+    note: clip(payment.note, MAX_NOTE),
+  };
+  const res = await client.request({ method: "POST", path: invoicePath(invoiceId, "/payments"), body }, [422]);
+  if (res.status === 422) {
+    if (res.issue === "CANNOT_PROCESS_PAYMENTS") return "not_payable";
+    throw refused(res);
+  }
+  return "recorded";
+}
+
 // The invoice with exactly this number, or null.
 export async function findByInvoiceNumber(client: PayPalClient, invoiceNumber: string): Promise<InvoiceView | null> {
   const found = await search(client, { invoice_number: invoiceNumber });

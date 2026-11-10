@@ -11,6 +11,7 @@ import { getDb } from "@/server/db/client";
 import { updateClientLocale } from "@/server/db/client-locale";
 import { demoCopyExists, resetDemoCopy } from "@/server/db/demo";
 import { liveReviewDeps, reviewOwnedMessage } from "@/server/review";
+import { liveSandboxPaymentDeps, simulateOwnedPayment } from "@/server/sandbox-payment";
 import { currentProjectId } from "@/server/session";
 
 // Anyone can POST to these, so each one reads only the id it needs, checks it, and takes the owner
@@ -141,6 +142,27 @@ export async function checkPayment(_prev: BillingActionResult | null, formData: 
     return { ok: false, error: "server_error" };
   }
   if (result.ok) refresh();
+  return result;
+}
+
+// Sandbox only: records the client's payment on the sent invoice through PayPal's API, as the demo video does. It never
+// marks the order paid: PayPal's signed webhook (or "Check payment") does that, as for a real payment. The page is
+// refreshed after a success, so the activity panel shows the step, and after already_paid, so a paid order shows it.
+export async function simulateClientPayment(_prev: BillingActionResult | null, formData: FormData): Promise<BillingActionResult> {
+  const changeOrderId = changeOrderIdSchema.safeParse(formData.get("changeOrderId"));
+  if (!changeOrderId.success) return { ok: false, error: "invalid_input" };
+
+  const ownerProjectId = await currentProjectId();
+  if (!ownerProjectId) return { ok: false, error: "not_found" };
+
+  let result: BillingActionResult;
+  try {
+    result = await simulateOwnedPayment(liveSandboxPaymentDeps(), ownerProjectId, changeOrderId.data);
+  } catch (error) {
+    console.error("simulating a sandbox payment failed", error);
+    return { ok: false, error: "server_error" };
+  }
+  if (result.ok || result.error === "already_paid") refresh();
   return result;
 }
 

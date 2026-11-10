@@ -86,7 +86,7 @@ export const ja = {
   changeOrder: {
     send: "追加見積を送る",
     sendAgain: "もう一度送る",
-    sending: "送信中…",
+    sending: "PayPal の請求書を作成して送信中…",
     includeFree: "無償で対応する",
     keepCharge: "請求を残す",
     confirmWaive: "確定：無償で対応する",
@@ -106,6 +106,11 @@ export const ja = {
     cancelConfirmHelp: "PayPal が請求書を取り消し、クライアントは支払えなくなります。取り消した後で再見積できます。",
     quoteAgain: "再見積する",
     quoting: "見積中…",
+    simulatePayment: "クライアントの支払いをシミュレート",
+    simulating: "PayPal に支払いを記録中…",
+    sandboxTag: "サンドボックス",
+    simulateHelp: "サンドボックス用の近道：クライアントが支払ったものとして、Tollgate が PayPal の API で支払いを記録します。チケットが支払い済みになるのは、PayPal の署名付き Webhook が届いたときだけです。",
+    simulateRecorded: "PayPal サンドボックスに支払いを記録しました。PayPal の署名付き Webhook を待っています — 通常は 1 分以内に届きます。「支払いを確認」を押すと今すぐ読み取ります。",
   },
   changeOrderErrors: {
     invalid_input: "この追加見積はあなたのデモにありません。ページを再読み込みしてください。",
@@ -127,6 +132,8 @@ export const ja = {
       "あなたのデモは直近 24 時間の PayPal 送信 {max} 回を使い切りました。何も送信していません。リセットしても回数は戻りません。",
     not_paid_yet: "PayPal ではまだ全額支払い済みになっていません。クライアントの支払い後にもう一度確認してください。",
     invoice_changed: "PayPal 上の請求金額が異なるため、支払い済みにしていません。PayPal で確認してください。",
+    sandbox_only: "このサーバーは PayPal サンドボックスではないため、支払いをシミュレートしていません。",
+    not_payable: "PayPal 上でこの請求書が支払い待ちになっていないため、支払いを記録していません。「支払いを確認」で状態を確かめてください。",
   },
   cancelErrors: {
     paypal_unavailable: "PayPal から応答がないため、請求書はまだ有効かもしれません。もう一度お試しください。",
@@ -138,6 +145,15 @@ export const ja = {
     paypal_unavailable: "PayPal から応答がないため、支払いを確認できませんでした。もう一度お試しください。",
     paypal_rejected: "PayPal がこの請求書を表示しなかったため、支払いを確認できませんでした。",
     not_configured: "このサーバーには PayPal が設定されていないため、支払いを確認できませんでした。",
+  },
+  simulateErrors: {
+    paypal_unavailable: "PayPal から応答がありません。もう一度お試しください。支払い済みの請求書に PayPal が 2 回目の支払いを記録することはありません。",
+    paypal_rejected: "PayPal が支払いの記録を拒否したため、何も変わっていません。",
+    not_configured: "このサーバーには PayPal が設定されていないため、支払いを記録していません。",
+    already_paid: "PayPal ではこの請求書がすでに支払い済みのため、2 回目の支払いは記録していません。「支払いを確認」を押してページを更新してください。",
+    rate_limited: "デモサーバーは本日、全訪問者合計で記録できるサンドボックス支払いの上限に達しました。代わりに PayPal のページでクライアントとして支払ってください。",
+    copy_rate_limited: "このデモは直近 24 時間の支払いシミュレーション {max} 回をすべて使いました。代わりに PayPal のページでクライアントとして支払ってください。",
+    invoice_changed: "PayPal 上の請求金額が異なるため、支払いを記録していません。PayPal で確認してください。",
   },
   composer: {
     label: "{client} からの新しいメッセージ",

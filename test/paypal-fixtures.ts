@@ -86,6 +86,9 @@ export const cannotSendInvoice = unprocessable("CANNOT_SEND_INVOICE", "Only DRAF
 export const invoiceCanceledAlready = unprocessable("INVOICE_CANCELED_ALREADY", "Invoice is already cancelled.", "invoiceId");
 export const cannotCancelPaidInvoice = unprocessable("CANNOT_CANCEL_PAID_INVOICE", "Cannot cancel a paid or partially paid invoice.", "invoiceId");
 export const cannotCancelDraftInvoice = unprocessable("CANNOT_CANCEL_DRAFT_INVOICE", "Draft invoice cannot be canceled.", "invoiceId");
+// Recording a payment (sandbox, Nov 10, 2026): 200 with the payment id, then 422 for a second payment on the paid invoice.
+export const recordedPayment = { payment_id: "EXTR-0AN5822557663391D" };
+export const cannotProcessPayments = unprocessable("CANNOT_PROCESS_PAYMENTS", "Current invoice state does not support payment processing.", "invoiceId");
 
 export const invalidRequest = {
   name: "INVALID_REQUEST",

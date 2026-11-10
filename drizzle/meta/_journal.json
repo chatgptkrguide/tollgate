@@ -57,6 +57,13 @@
       "when": 1793884724361,
       "tag": "0007_projects_client_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794294684746,
+      "tag": "0008_sandbox_payments",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 // One step the app, PayPal or Claude took, as the activity panel shows it.
-// P2 writes the PayPal steps; P3 adds payment_confirmed; P4 adds the review steps; P6 adds work_unlocked.
+// P2 writes the PayPal steps; P3 adds payment_confirmed; P4 adds the review steps; P6 adds work_unlocked;
+// payment_recorded is the sandbox shortcut that records the client's payment through PayPal's API.
 // The database has no CHECK on these lists (a new kind would need a table rebuild), so this file is the guard.
 export const ACTIVITY_KINDS = [
   "message_read",
@@ -12,6 +13,7 @@ export const ACTIVITY_KINDS = [
   "paypal_failed",
   "payment_confirmed",
   "work_unlocked",
+  "payment_recorded",
 ] as const;
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 

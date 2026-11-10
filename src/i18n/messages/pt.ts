@@ -86,7 +86,7 @@ export const pt = {
   changeOrder: {
     send: "Enviar orçamento adicional",
     sendAgain: "Enviar de novo",
-    sending: "Enviando…",
+    sending: "Criando e enviando a fatura do PayPal…",
     includeFree: "Incluir sem custo",
     keepCharge: "Manter a cobrança",
     confirmWaive: "Confirmar: incluir sem custo",
@@ -106,6 +106,11 @@ export const pt = {
     cancelConfirmHelp: "O PayPal vai cancelar a fatura e o cliente não poderá mais pagá-la. Depois você pode orçar de novo.",
     quoteAgain: "Orçar de novo",
     quoting: "Orçando…",
+    simulatePayment: "Simular o pagamento do cliente",
+    simulating: "Registrando o pagamento no PayPal…",
+    sandboxTag: "Sandbox",
+    simulateHelp: "Atalho do sandbox: o Tollgate registra o pagamento pela API do PayPal, como se o cliente tivesse pago. O ticket só fica Pago quando chega o webhook assinado do PayPal.",
+    simulateRecorded: "Pagamento registrado no sandbox do PayPal. Aguardando o webhook assinado do PayPal — costuma levar menos de um minuto. Verificar pagamento lê agora.",
   },
   changeOrderErrors: {
     invalid_input: "Este orçamento adicional não está na sua cópia da demo. Recarregue a página.",
@@ -127,6 +132,8 @@ export const pt = {
       "Sua cópia da demo já usou os {max} envios do PayPal das últimas 24 horas, então nada foi enviado; reiniciá-la não muda isso.",
     not_paid_yet: "O PayPal ainda não mostra esta fatura como paga por completo. Verifique de novo depois que o cliente pagar.",
     invoice_changed: "O PayPal mostra outro valor para esta fatura, então ela não foi marcada como paga. Confira no PayPal.",
+    sandbox_only: "Este servidor não usa o sandbox do PayPal, então nenhum pagamento foi simulado.",
+    not_payable: "O PayPal não mostra esta fatura aguardando pagamento, então nenhum pagamento foi registrado. Clique em Verificar pagamento para ver a situação.",
   },
   cancelErrors: {
     paypal_unavailable: "O PayPal não respondeu, então a fatura ainda pode estar aberta. Tente de novo.",
@@ -138,6 +145,15 @@ export const pt = {
     paypal_unavailable: "O PayPal não respondeu, então não foi possível verificar o pagamento. Tente de novo.",
     paypal_rejected: "O PayPal se recusou a mostrar esta fatura, então não foi possível verificar o pagamento.",
     not_configured: "O PayPal não está configurado neste servidor, então não foi possível verificar o pagamento.",
+  },
+  simulateErrors: {
+    paypal_unavailable: "O PayPal não respondeu. Tente de novo; o PayPal nunca registra um segundo pagamento numa fatura paga.",
+    paypal_rejected: "O PayPal recusou registrar o pagamento, então nada mudou.",
+    not_configured: "O PayPal não está configurado neste servidor, então nenhum pagamento foi registrado.",
+    already_paid: "O PayPal já mostra esta fatura como paga, então nenhum segundo pagamento foi registrado. Clique em Verificar pagamento para atualizar a página.",
+    rate_limited: "O servidor da demo já registrou hoje todos os pagamentos de sandbox que pode, somando todos os visitantes. Pague como o cliente na página do PayPal.",
+    copy_rate_limited: "Sua cópia da demo já usou seus {max} pagamentos simulados das últimas 24 horas. Pague como o cliente na página do PayPal.",
+    invoice_changed: "O PayPal mostra outro valor para esta fatura, então nenhum pagamento foi registrado. Confira no PayPal.",
   },
   composer: {
     label: "Nova mensagem de {client}",

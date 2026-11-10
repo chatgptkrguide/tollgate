@@ -10,6 +10,7 @@ import {
   cancelledInvoice,
   cannotCancelDraftInvoice,
   cannotCancelPaidInvoice,
+  cannotProcessPayments,
   cannotSendInvoice,
   createdDraft,
   duplicateInvoiceNumber,
@@ -19,6 +20,7 @@ import {
   invalidToken,
   invoiceAlreadySent,
   invoiceCanceledAlready,
+  recordedPayment,
   resourceNotFound,
   searchResult,
   sendResponse,
@@ -34,6 +36,8 @@ import {
   getInvoice,
   invoiceBody,
   INVOICE_NUMBER_USED_UP,
+  recordPayment,
+  SANDBOX_ONLY,
   sendInvoice,
   type InvoiceInput,
 } from "./invoices";
@@ -429,5 +433,74 @@ describe("청구서 검색", () => {
 
     expect(found?.id).toBe(INVOICE_ID);
     expect(missing).toBeNull();
+  });
+});
+
+describe("샌드박스 결제 기록 (Simulate the client's payment)", () => {
+  const PAYMENTS = `POST /v2/invoicing/invoices/${INVOICE_ID}/payments`;
+  const payment = { amountValue: "650.00", date: "2026-11-10", note: "Sandbox demo: recorded by Tollgate as the client's payment" };
+
+  it("200이면 recorded이고, 본문은 PAYPAL 방식·날짜·USD 전액·메모다", async () => {
+    const pp = paypal({ [PAYMENTS]: { status: 200, body: recordedPayment } });
+
+    const result = await recordPayment(pp.client, INVOICE_ID, payment);
+
+    expect(result).toBe("recorded");
+    expect(pp.to(PAYMENTS)).toHaveLength(1);
+    expect(json(pp.to(PAYMENTS)[0].body)).toEqual({
+      method: "PAYPAL",
+      payment_date: "2026-11-10",
+      amount: { currency_code: "USD", value: "650.00" },
+      note: "Sandbox demo: recorded by Tollgate as the client's payment",
+    });
+    expect(pp.to(PAYMENTS)[0].url.startsWith("https://api-m.sandbox.paypal.com/")).toBe(true);
+  });
+
+  it("이미 결제된 청구서의 422 CANNOT_PROCESS_PAYMENTS는 not_payable로 답한다", async () => {
+    const pp = paypal({ [PAYMENTS]: { status: 422, body: cannotProcessPayments } });
+
+    expect(await recordPayment(pp.client, INVOICE_ID, payment)).toBe("not_payable");
+  });
+
+  it("다른 422·400·5xx는 PayPal 오류로 던진다", async () => {
+    const other = paypal({ [PAYMENTS]: { status: 422, body: cannotSendInvoice } });
+    const bad = paypal({ [PAYMENTS]: { status: 400, body: invalidRequest } });
+    const down = paypal({ [PAYMENTS]: { status: 500, body: internalServerError } });
+
+    const errors = [
+      await failureOf(recordPayment(other.client, INVOICE_ID, payment)),
+      await failureOf(recordPayment(bad.client, INVOICE_ID, payment)),
+      await failureOf(recordPayment(down.client, INVOICE_ID, payment)),
+    ];
+
+    expect(errors.map((e) => [e.failure, e.httpStatus])).toEqual([
+      ["rejected", 422],
+      ["rejected", 400],
+      ["unavailable", 500],
+    ]);
+  });
+
+  it("live 클라이언트에서는 요청을 하나도 보내지 않고 SANDBOX_ONLY로 거절한다", async () => {
+    const liveConfig = paypalConfig(
+      parseEnv({ PAYPAL_ENV: "live", PAYPAL_CLIENT_ID: "stand-in-id", PAYPAL_CLIENT_SECRET: "stand-in-secret", PAYPAL_WEBHOOK_ID: "WH1" }),
+    )!;
+    const fake = fakeFetch({ [PAYMENTS]: { status: 200, body: recordedPayment } });
+    const live = createPayPalClient(liveConfig, { fetch: fake.fetch });
+
+    const error = await failureOf(recordPayment(live, INVOICE_ID, payment));
+
+    expect([error.failure, error.issue]).toEqual(["rejected", SANDBOX_ONLY]);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("금액·날짜 형식이 틀리거나 청구서 id 모양이 아니면 PayPal을 부르지 않는다", async () => {
+    const pp = paypal({ [PAYMENTS]: { status: 200, body: recordedPayment } });
+
+    await expect(recordPayment(pp.client, INVOICE_ID, { ...payment, amountValue: "650" })).rejects.toThrow(RangeError);
+    await expect(recordPayment(pp.client, INVOICE_ID, { ...payment, date: "Nov 10" })).rejects.toThrow(RangeError);
+    const badId = await failureOf(recordPayment(pp.client, "../x", payment));
+
+    expect(badId.issue).toBe("INVALID_INVOICE_ID");
+    expect(pp.calls).toEqual([]);
   });
 });
