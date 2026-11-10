@@ -41,10 +41,10 @@ Languages: the screen reads in English, Korean, Japanese, Spanish or Portuguese 
 **Testing for judges:** everything below runs on the live demo with no sign-up, in the same order as the demo video. The only private detail, a PayPal sandbox buyer login for step 4, is in the testing-instructions field of our Devpost submission.
 
 1. Open the [live demo](https://tollgate-ratq.onrender.com). Each visitor gets a private sandbox copy of a demo project, so you can't break anyone else's. **Reset demo** puts your copy back. If too many new demos were started recently (10 from one address in an hour, or 500 on the server in a day), a new visitor sees the demo read-only and nothing is saved until then.
-2. **Claude checks a message.** Paste a new client message into the message box (or press **Use a sample message**), then press **Check scope**. Claude marks the phrases the agreed scope doesn't cover and prints a ticket with its hours; the app prices it from the hourly rate. Nothing is sent yet. Each copy can run 10 checks a day.
+2. **Claude checks a message.** Paste a new client message into the message box (or press **Use a sample message**), then press **Check scope**. Claude marks the phrases the agreed scope doesn't cover and prints a ticket with its hours; the app prices it from the hourly rate. Claude's estimate can differ from run to run. Nothing is sent yet. Each copy can run 10 checks a day.
 3. **Send the change order.** On that ticket (or the loyalty page ticket already in the demo), press **Send change order**. Tollgate creates and sends a PayPal sandbox invoice. One copy can send up to 20 invoices per 24 hours.
-4. **Pay it as the client.** Open the client's PayPal page from the ticket and pay with a PayPal sandbox personal (buyer) account. The credentials are not in this repository.
-5. **Back in Tollgate:** the ticket shows **Paid**, its gate lifts, and the Delivery panel unlocks the work and moves the launch date. The project total turns green once nothing is left unpaid (send, pay or include the other ticket at no charge). If the webhook is late, press **Check payment**.
+4. **Pay it as the client.** Press **Open the client's PayPal page** on the ticket and pay with a PayPal sandbox personal (buyer) account. The credentials are not in this repository.
+5. **Back in Tollgate:** the ticket shows **Paid**, its gate lifts, and the Delivery panel unlocks the work and moves the launch date. The project total turns green only when nothing is left unpaid (send and pay the other ticket too, or include it at no charge). If the webhook is late, press **Check payment**.
 
 ![Claude marking "add a blog so we can post seasonal drinks" in a new client message on the live demo](docs/images/screen-claude-review-live.png)
 
@@ -97,7 +97,7 @@ Next.js 16, React 19, TypeScript, Tailwind CSS 4, libSQL and Drizzle (SQLite loc
 ## Built with AI tools
 
 - **In the product:** Claude (through the Anthropic API) reviews client messages, as described in [How Claude is used](#how-claude-is-used). It proposes; the app prices and the person decides.
-- **To build it:** Claude Code (Anthropic) helped write and review much of the code, tests and documentation under the author's direction. The author set the scope and design, reviewed the changes, and tested the result, including paying sandbox invoices by hand.
+- **To build it:** Claude Code (Anthropic) helped write and review much of the code, tests and documentation under the author's direction. The author set the scope and design, reviewed the changes, and tested the result. The demo video records the sandbox payment through PayPal's API; paying through the buyer's payer page is the path described in "Try it" and has not been shown on video.
 
 ## License
 
