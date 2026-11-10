@@ -30,24 +30,24 @@ beforeEach(() => {
 });
 
 describe("getLocale(): 요청의 화면 언어", () => {
-  it("tg_locale 쿠키가 있으면 Accept-Language보다 쿠키를 따른다", async () => {
+  it("tg_locale 쿠키가 있으면 Accept-Language와 상관없이 쿠키를 따른다", async () => {
     request.cookies.set(LOCALE_COOKIE, "ko");
     request.headers.set("accept-language", "ja-JP,ja;q=0.9");
 
     expect(await getLocale()).toBe("ko");
   });
 
-  it("쿠키가 없으면 Accept-Language에서 가장 맞는 언어를 고른다", async () => {
-    request.headers.set("accept-language", "fr-FR,pt-BR;q=0.8,en;q=0.5");
+  it("쿠키가 없으면 브라우저가 한국어를 원해도 영어다", async () => {
+    request.headers.set("accept-language", "ko-KR,ko;q=0.9,en;q=0.8");
 
-    expect(await getLocale()).toBe("pt");
+    expect(await getLocale()).toBe("en");
   });
 
-  it("쿠키 값이 지원 언어가 아니면 무시한다", async () => {
+  it("쿠키 값이 지원 언어가 아니면 무시하고 영어다", async () => {
     request.cookies.set(LOCALE_COOKIE, "de");
     request.headers.set("accept-language", "es");
 
-    expect(await getLocale()).toBe("es");
+    expect(await getLocale()).toBe("en");
   });
 
   it("쿠키도 헤더도 없으면 영어다", async () => {

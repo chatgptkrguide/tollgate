@@ -1,8 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // The screen language (the visitor's tg_locale cookie) and the client language (the project's client_locale, what
-// new PayPal invoices are written in) on the server without PayPal or Claude keys. Chrome asks for English, so every
-// page opens in English until the visitor picks another language.
+// new PayPal invoices are written in) on the server without PayPal or Claude keys. Every page opens in English, whatever
+// languages the browser asks for, until the visitor picks another language in the top bar.
 
 // The client language after a reload, rendered by the server from the database. (Reading data/e2e.db from the
 // test while the server writes it made the server's write fail with "database is locked".)
@@ -51,6 +51,25 @@ test.describe("화면 언어", () => {
     await expect(page.getByRole("button", { name: "범위 확인" })).toBeVisible();
     await expect(page.locator("aside.ticket").first()).toContainText("Loyalty page with customer login");
     await expect(page.getByText("Quick one: could we")).toBeVisible();
+  });
+});
+
+test.describe("한국어 브라우저의 첫 방문", () => {
+  // Chrome sends Accept-Language: ko-KR,ko from this locale.
+  test.use({ locale: "ko-KR" });
+
+  test("브라우저가 한국어를 원해도 처음에는 영어이고, 고르면 한국어가 된다", async ({ page }) => {
+    await page.goto("/");
+
+    const switcher = page.getByRole("combobox", { name: "Language", exact: true });
+    await expect(switcher).toHaveValue("en");
+    await expect(page.getByRole("button", { name: "Check scope" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+
+    await switcher.selectOption("ko");
+
+    await expect(page.getByRole("button", { name: "범위 확인" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("lang", "ko-KR");
   });
 });
 

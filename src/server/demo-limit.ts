@@ -11,7 +11,7 @@ import { countCopiesCreatedSince, type MayCreateCopy } from "./db/demo";
 export const NEW_COPIES_PER_IP_PER_HOUR = 10;
 export const IP_WINDOW_MS = 60 * 60 * 1000;
 // New copies on the whole server in any 24 hours. Copies live seven days, so at most about 7 × this many exist
-// (about 3,500 copies, ~45,000 rows: a few MB of the 1 GB disk) whatever the IP addresses look like.
+// (about 3,500 copies, ~45,000 rows: a few MB, well inside the free Turso database) whatever the IP addresses look like.
 export const NEW_COPIES_PER_DAY = 500;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 // Addresses remembered at once. Past this, finished windows are dropped first, then everything; the daily cap
@@ -23,8 +23,8 @@ interface Window {
   count: number;
 }
 
-// A fixed one-hour window per address, kept in this process's memory. The app runs as one instance (Render, one
-// disk), so this sees every request; a restart forgets the counts, and the database-backed daily cap still holds.
+// A fixed one-hour window per address, kept in this process's memory. The app runs as one instance (one Render
+// web service), so this sees every request; a restart forgets the counts, and the database-backed daily cap still holds.
 export class AddressLimiter {
   private readonly windows = new Map<string, Window>();
 

@@ -40,7 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# private notes (personal goals, pricing) — never commit
+# private working notes — never commit
 _자료/
 
 # example env is committed
@@ -59,3 +59,7 @@ _자료/
 # Playwright output
 /test-results/
 /playwright-report/
+
+# local tool output
+/.playwright-mcp/
+/.claude/worktrees/

@@ -99,7 +99,7 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
       <MotionDirector projectId={project.id} snapshot={seenSnapshot(data, activity)} />
       <LinkHighlighter />
 
-      <div className="sticky top-0 z-30 border-b border-line bg-surface">
+      <div data-top-bar="" className="sticky top-0 z-30 border-b border-line bg-surface">
         <div className="mx-auto flex min-h-16 max-w-[1280px] items-center gap-3 px-4 py-2 sm:gap-4 sm:px-8">
           <p className="flex items-center gap-2 pt-0.5 font-display text-[20px] font-extrabold tracking-[-0.01em]">
             <BarrierGlyph size={28} />

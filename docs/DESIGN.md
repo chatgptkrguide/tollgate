@@ -10,7 +10,7 @@ Each extra-work change order is a toll ticket, and the client's payment lifts a 
 | Data | Overpass Mono | Ticket numbers, dates, hours and days, the Scope ledger, the delivery road labels | Same skeleton as Overpass, so numbers sit in the same voice; fixed width keeps columns and ticket numbers steady. |
 | Reading | Public Sans | Message bodies, help text, reasons, the demo guide | Messages are paragraphs. Public Sans (from the US Web Design System) reads better than Overpass at 15–16 px for long lines and keeps the civic, signage tone. |
 
-Big money figures (the header total, ticket amounts, the agreed amount) use Overpass with tabular figures, not Overpass Mono: at 30–44 px the mono comma takes a full cell and "$3,300" reads as "$3 , 300". Smaller amounts in the Scope ledger stay mono. Literata is gone.
+Big money figures (the header total, ticket amounts, the agreed amount) use Overpass with tabular figures, not Overpass Mono: at 30–44 px the mono comma takes a full cell and "$3,300" reads as "$3 , 300". Smaller amounts in the Scope ledger stay mono.
 
 All sizes are 13 px or more; body text is 15–16 px and the composer textarea 16 px (no zoom on iOS).
 

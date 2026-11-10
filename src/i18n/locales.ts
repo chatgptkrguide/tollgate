@@ -32,33 +32,9 @@ export function isLocale(value: unknown): value is Locale {
   return typeof value === "string" && (LOCALES as readonly string[]).includes(value);
 }
 
-interface Weighted {
-  locale: Locale;
-  q: number;
-  order: number;
-}
-
-// The best supported locale for an Accept-Language header ("ko-KR,ko;q=0.9,en;q=0.8"), or null when none matches.
-// Only the primary subtag counts ("pt-PT" still picks pt, our Brazilian Portuguese). A q of 0 means "not this one".
-// Equal weights keep the header's order.
-export function matchAcceptLanguage(header: string | null | undefined): Locale | null {
-  if (!header) return null;
-  const candidates: Weighted[] = [];
-  header.split(",").forEach((part, order) => {
-    const [range = "", ...params] = part.trim().split(";");
-    const primary = range.trim().split("-")[0]?.toLowerCase();
-    if (!isLocale(primary)) return;
-    const qParam = params.map((p) => p.trim()).find((p) => p.startsWith("q="));
-    const q = qParam === undefined ? 1 : Number(qParam.slice(2));
-    if (!(q > 0 && q <= 1)) return;
-    candidates.push({ locale: primary, q, order });
-  });
-  candidates.sort((a, b) => b.q - a.q || a.order - b.order);
-  return candidates[0]?.locale ?? null;
-}
-
-// The order every request follows: a valid cookie, then the browser's languages, then English.
-export function resolveLocale(cookieValue: string | null | undefined, acceptLanguage: string | null | undefined): Locale {
-  if (isLocale(cookieValue)) return cookieValue;
-  return matchAcceptLanguage(acceptLanguage) ?? DEFAULT_LOCALE;
+// The screen language of a request: the visitor's own choice (a valid tg_locale cookie), else English. The browser's
+// Accept-Language is not consulted: the demo conversation and scope are English, so a Korean browser would otherwise
+// show Korean buttons around English messages. Every language stays one pick away in the top bar.
+export function resolveLocale(cookieValue: string | null | undefined): Locale {
+  return isLocale(cookieValue) ? cookieValue : DEFAULT_LOCALE;
 }
