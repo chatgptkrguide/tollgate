@@ -86,7 +86,7 @@ export function Ticket({ order, finding, author, askedOn, sendBlockedReason, rea
         </p>
         <p className="mt-3 text-[14px] leading-relaxed text-ink-2">
           {t(locale, "ticket.asked", { author, date: formatDate(locale, askedOn) })}{" "}
-          <a href={`#${quoteId(finding.id)}`} className="text-ink underline decoration-line decoration-2 underline-offset-4 hover:decoration-ink-2">
+          <a href={`#${quoteId(finding.id)}`} className="-mx-1 px-1 py-1.5 text-ink underline decoration-line decoration-2 underline-offset-4 hover:decoration-ink-2">
             <span className="sr-only">{t(locale, "ticket.showInMessage")}</span>“{finding.quote}”
           </a>
         </p>

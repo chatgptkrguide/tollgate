@@ -16,7 +16,7 @@
   --color-go: #12805c; /* 4.9:1 on white */
   --color-go-ink: #0e6a4c; /* small GO text on go-wash: 5.8:1 */
   --color-go-wash: #e3f3ec;
-  --color-idle: #8a93a3; /* included / cancelled lamps and segments (non-text, 3.1:1) */
+  --color-idle: #7b8494; /* included / cancelled lamps and segments (non-text): 3.8:1 on white, 3.3:1 on idle-wash */
   --color-idle-wash: #eceef2;
 
   --shadow-ticket: 0 1px 2px rgb(18 22 31 / 0.06), 0 4px 12px rgb(18 22 31 / 0.06);

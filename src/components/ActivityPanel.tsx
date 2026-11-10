@@ -77,10 +77,10 @@ export function ActivityPanel({ activity, locale }: ActivityPanelProps) {
 function ActivityItem({ event, locale }: ActivityItemProps) {
   return (
     <li className="grid grid-cols-[72px_minmax(0,1fr)] gap-3 border-b border-line py-2.5 last:border-b-0" data-kind={event.kind} data-fx-activity={event.id}>
-      <span className="pt-0.5 font-mono text-[11px] font-semibold tracking-[0.06em] text-ink-2 uppercase">{actorText[event.actor]}</span>
+      <span className="pt-0.5 font-mono text-[12.5px] font-semibold tracking-[0.06em] text-ink-2 uppercase">{actorText[event.actor]}</span>
       <span className="text-[14px] leading-relaxed">
         {event.summary}
-        <span className="mt-0.5 block font-mono text-[12px] text-ink-2">{stepTime(locale, event.at)}</span>
+        <span className="mt-0.5 block font-mono text-[13px] text-ink-2">{stepTime(locale, event.at)}</span>
       </span>
     </li>
   );
