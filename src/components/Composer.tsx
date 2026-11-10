@@ -47,11 +47,11 @@ export function Composer({ client, blockedReason, locale }: ComposerProps) {
     if (result.ok) setText((current) => (current === sent ? "" : current));
     return result;
   }, null);
-  // A marked request printed a ticket at the top of the tickets column: show it (on a phone it is far above) and move
-  // focus to it. Runs once per answer.
+  // A marked request printed a ticket at the top of the tickets column: show it (on a phone it is far above). Runs once
+  // per answer. reviewMessage calls refresh(), and React commits the refreshed page in the same transition as this
+  // answer, so the ticket is already in the page when this runs.
   useEffect(() => {
-    if (!state?.ok || state.marked === 0) return;
-    return revealNewTicket(ticketsBefore.current);
+    if (state?.ok && state.marked > 0) revealNewTicket(ticketsBefore.current);
   }, [state]);
   // Pressing Check scope while checking is off says why in the result line, so the press is never a dead click.
   const [blockedPressed, setBlockedPressed] = useState(false);
