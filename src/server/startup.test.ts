@@ -39,7 +39,7 @@ describe("서버 시작 검사와 마이그레이션", () => {
     const { tables, migrations } = await tablesAndRows();
     expect(result).toEqual({ migrations: journalEntries });
     expect(migrations).toHaveLength(journalEntries);
-    expect(tables).toEqual(["__drizzle_migrations", "activity_events", "change_orders", "claude_calls", "findings", "messages", "paypal_sends", "projects", "scope_items", "webhook_events"]);
+    expect(tables).toEqual(["__drizzle_migrations", "activity_events", "change_orders", "claude_calls", "findings", "messages", "paypal_sends", "projects", "sandbox_payments", "scope_items", "webhook_events"]);
   });
 
   it("이미 마이그레이션된 DB로 다시 부르면 아무것도 바뀌지 않는다", async () => {

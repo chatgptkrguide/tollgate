@@ -38,13 +38,13 @@ Languages: the screen reads in English, Korean, Japanese, Spanish or Portuguese 
 
 ## Try it
 
-**Testing for judges:** everything below runs on the live demo with no sign-up, in the same order as the demo video. The only private detail, a PayPal sandbox buyer login for step 4, is in the testing-instructions field of our Devpost submission.
+**Testing for judges:** everything below runs on the live demo with no sign-up, in the same order as the demo video. The only private detail, a PayPal sandbox buyer login for step 4, is in the testing-instructions field of our Devpost submission; step 4 also works without it.
 
 1. Open the [live demo](https://tollgate-ratq.onrender.com). Each visitor gets a private sandbox copy of a demo project, so you can't break anyone else's. **Reset demo** puts your copy back. If too many new demos were started recently (10 from one address in an hour, or 500 on the server in a day), a new visitor sees the demo read-only and nothing is saved until then.
-2. **Claude checks a message.** Paste a new client message into the message box (or press **Use a sample message**), then press **Check scope**. Claude marks the phrases the agreed scope doesn't cover and prints a ticket with its hours; the app prices it from the hourly rate. Nothing is sent yet. Each copy can run 10 checks a day.
+2. **Claude checks a message.** Paste a new client message into the message box (or press **Use a sample message**), then press **Check scope**. Claude marks the phrases the agreed scope doesn't cover and prints a ticket with its hours; the app prices it from the hourly rate. Claude's estimate can differ from run to run. Nothing is sent yet. Each copy can run 10 checks a day.
 3. **Send the change order.** On that ticket (or the loyalty page ticket already in the demo), press **Send change order**. Tollgate creates and sends a PayPal sandbox invoice. One copy can send up to 20 invoices per 24 hours.
-4. **Pay it as the client.** Open the client's PayPal page from the ticket and pay with a PayPal sandbox personal (buyer) account. The credentials are not in this repository.
-5. **Back in Tollgate:** the ticket shows **Paid**, its gate lifts, and the Delivery panel unlocks the work and moves the launch date. The project total turns green once nothing is left unpaid (send, pay or include the other ticket at no charge). If the webhook is late, press **Check payment**.
+4. **Pay it as the client.** Press **Open the client's PayPal page** on the ticket and pay with a PayPal sandbox personal (buyer) account. The credentials are not in this repository. **No buyer login?** Press **Simulate the client's payment** (marked Sandbox) instead. It records the payment on the invoice through PayPal's API in the sandbox, the same call our demo video uses; it does not mark anything paid itself, so the page still waits for PayPal's signed webhook (usually under a minute) and turns Paid without a reload. Each copy can simulate 5 payments per 24 hours.
+5. **Back in Tollgate:** the ticket shows **Paid**, its gate lifts, and the Delivery panel unlocks the work and moves the launch date. The project total turns green only when nothing is left unpaid (send and pay the other ticket too, or include it at no charge). If the webhook is late, press **Check payment**.
 
 ![Claude marking "add a blog so we can post seasonal drinks" in a new client message on the live demo](docs/images/screen-claude-review-live.png)
 
@@ -58,6 +58,7 @@ All calls are sandbox REST calls made by the server, from a button the freelance
 - **Idempotent invoice numbers:** in our sandbox tests the Invoicing API ignored `PayPal-Request-Id`, so the app makes its own guard: the invoice number comes from the change order id, and the database marks a send before the call. A double click or a retry cannot create a second invoice. The app saves the invoice id before it sends.
 - **Webhooks:** PayPal posts `INVOICING.INVOICE.PAID` to `/api/webhooks/paypal`. The server checks the signature with PayPal's verify-webhook-signature call, records each event id once, and reads the invoice back before it marks anything paid (it also checks the amount and that the currency is USD). A request that fails verification is refused.
 - **Check payment fallback:** if a webhook is late or lost, one button reads the invoice from PayPal and applies the same rule. A webhook and a click can't both change the status.
+- **Record payment (sandbox only):** "Simulate the client's payment" calls `POST /v2/invoicing/invoices/{id}/payments` for the invoice's full amount, so PayPal marks it paid and sends the signed webhook; the app never marks it paid on its own. It refuses outside the sandbox, records nothing on an invoice PayPal already shows paid, and is capped per copy and per server.
 
 ## How Claude is used
 
@@ -97,7 +98,7 @@ Next.js 16, React 19, TypeScript, Tailwind CSS 4, libSQL and Drizzle (SQLite loc
 ## Built with AI tools
 
 - **In the product:** Claude (through the Anthropic API) reviews client messages, as described in [How Claude is used](#how-claude-is-used). It proposes; the app prices and the person decides.
-- **To build it:** Claude Code (Anthropic) helped write and review much of the code, tests and documentation under the author's direction. The author set the scope and design, reviewed the changes, and tested the result, including paying sandbox invoices by hand.
+- **To build it:** Claude Code (Anthropic) helped write and review much of the code, tests and documentation under the author's direction. The author set the scope and design, reviewed the changes, and tested the result. The demo video records the sandbox payment through PayPal's API; paying through the buyer's payer page is the path described in "Try it" and has not been shown on video.
 
 ## License
 

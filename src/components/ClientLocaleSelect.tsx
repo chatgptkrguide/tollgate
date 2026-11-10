@@ -69,7 +69,7 @@ export function ClientLocaleSelect({ projectId, clientLocale, label, help, saveF
           </option>
         ))}
       </select>
-      <p id={helpId} className="basis-full text-[12px] leading-snug text-ink-2 sm:basis-auto">
+      <p id={helpId} className="basis-full text-[13px] leading-snug text-ink-2 sm:basis-auto">
         {help}
       </p>
       {failed && (
