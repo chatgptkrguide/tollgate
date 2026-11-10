@@ -23,6 +23,7 @@ export const ja = {
     saveFailed: "クライアントの言語を保存できませんでした。もう一度お試しください。",
   },
   workspace: {
+    previewLabel: "閲覧専用のデモ",
     agreed: "合意額",
     totalWithChanges: "追加込みの合計",
     notPaidYet: "{amount} 未払い",

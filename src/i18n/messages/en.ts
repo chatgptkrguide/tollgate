@@ -35,6 +35,7 @@ export const en = {
     saveFailed: "The client's language couldn't be saved. Try again.",
   },
   workspace: {
+    previewLabel: "View-only demo", // names the region around the page.previewOnly notice
     agreed: "Agreed",
     totalWithChanges: "Total with changes",
     notPaidYet: "{amount} not paid yet",

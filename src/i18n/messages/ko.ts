@@ -23,6 +23,7 @@ export const ko = {
     saveFailed: "클라이언트 언어를 저장하지 못했어요. 다시 시도해 주세요.",
   },
   workspace: {
+    previewLabel: "보기 전용 데모",
     agreed: "합의 금액",
     totalWithChanges: "추가 포함 합계",
     notPaidYet: "{amount} 미결제",

@@ -99,7 +99,8 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
       <MotionDirector projectId={project.id} snapshot={seenSnapshot(data, activity)} />
       <LinkHighlighter />
 
-      <div data-top-bar="" className="sticky top-0 z-30 border-b border-line bg-surface">
+      {/* The page banner: the only <header> outside <main> (ProjectHeader below is a named section). */}
+      <header data-top-bar="" className="sticky top-0 z-30 border-b border-line bg-surface">
         <div className="mx-auto flex min-h-16 max-w-[1280px] items-center gap-3 px-4 py-2 sm:gap-4 sm:px-8">
           <p className="flex items-center gap-2 pt-0.5 font-display text-[20px] font-extrabold tracking-[-0.01em]">
             <BarrierGlyph size={28} />
@@ -118,12 +119,14 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
             {previewReason === null && <ResetDemo projectId={project.id} locale={locale} />}
           </div>
         </div>
-      </div>
+      </header>
 
       {previewReason !== null && (
-        <p role="status" data-testid="preview-notice" className="border-b border-line bg-stop-wash">
-          <span className="mx-auto block max-w-[1280px] px-4 py-3 text-[14px] leading-relaxed font-semibold sm:px-8">{previewReason}</span>
-        </p>
+        <section aria-label={t(locale, "workspace.previewLabel")}>
+          <p role="status" data-testid="preview-notice" className="border-b border-line bg-stop-wash">
+            <span className="mx-auto block max-w-[1280px] px-4 py-3 text-[14px] leading-relaxed font-semibold sm:px-8">{previewReason}</span>
+          </p>
+        </section>
       )}
 
       <DemoGuide
@@ -168,10 +171,10 @@ function ProjectHeader({ data, client, readOnly, locale }: ProjectHeaderProps) {
   const tone = totals.hasUnpaid ? "stop" : "go";
 
   return (
-    <header className="border-b border-line bg-surface">
+    <section aria-labelledby="project-title" className="border-b border-line bg-surface">
       <div className="mx-auto flex max-w-[1280px] flex-wrap items-end justify-between gap-x-10 gap-y-4 px-4 py-5 sm:px-8">
         <div className="min-w-0">
-          <h1 className="font-display text-[30px] leading-tight font-extrabold tracking-[-0.015em]">{project.clientName}</h1>
+          <h1 id="project-title" className="font-display text-[30px] leading-tight font-extrabold tracking-[-0.015em]">{project.clientName}</h1>
           <p className="mt-1 text-ink-2">
             {project.title} · {client} · {t(locale, "workspace.agreedOn", { date: formatDate(locale, project.agreedOn) })}
           </p>
@@ -207,7 +210,7 @@ function ProjectHeader({ data, client, readOnly, locale }: ProjectHeaderProps) {
           </div>
         </dl>
       </div>
-    </header>
+    </section>
   );
 }
 

@@ -23,6 +23,7 @@ export const es = {
     saveFailed: "No se pudo guardar el idioma del cliente. Inténtalo de nuevo.",
   },
   workspace: {
+    previewLabel: "Demo solo de lectura",
     agreed: "Acordado",
     totalWithChanges: "Total con cambios",
     notPaidYet: "{amount} sin pagar",
