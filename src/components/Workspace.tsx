@@ -30,6 +30,7 @@ export interface WorkspaceProps {
   // Set when a new copy was refused (demo-limit.ts): data is the seed from memory and nothing can be saved, so the
   // screen says so, and resetting and the client language are off. The page passes it as both reasons above too.
   previewReason: string | null;
+  guideOpen: boolean; // the visitor left the demo guide open (guide-state.ts)
   locale: Locale; // the screen language of this request (getLocale())
 }
 
@@ -88,7 +89,7 @@ function seenSnapshot(data: WorkspaceData, activity: readonly ActivityEvent[]): 
 
 // The whole screen is rendered on the server from the database; only the action forms and the small motion helpers
 // run in the browser.
-export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReason, previewReason, locale }: WorkspaceProps) {
+export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReason, previewReason, guideOpen, locale }: WorkspaceProps) {
   const { project } = data;
   const client = data.messages.find((m) => m.from === "client")?.author ?? project.clientName;
   const awaitingPayment = data.changeOrders.some((o) => o.status === "sent");
@@ -121,19 +122,13 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
         </div>
       </header>
 
-      {previewReason !== null && (
-        <section aria-label={t(locale, "workspace.previewLabel")}>
-          <p role="status" data-testid="preview-notice" className="border-b border-line bg-stop-wash">
-            <span className="mx-auto block max-w-[1280px] px-4 py-3 text-[14px] leading-relaxed font-semibold sm:px-8">{previewReason}</span>
-          </p>
-        </section>
-      )}
-
+      {/* The guide also carries the view-only notice when previewReason is set. */}
       <DemoGuide
         client={client}
         reviewBlockedReason={reviewBlockedReason}
         target={guideTarget(data, locale)}
-        defaultOpen={activity.length === 0}
+        readOnly={previewReason !== null}
+        defaultOpen={guideOpen}
         locale={locale}
       />
       <ProjectHeader data={data} client={client} readOnly={previewReason !== null} locale={locale} />
@@ -192,7 +187,8 @@ function ProjectHeader({ data, client, readOnly, locale }: ProjectHeaderProps) {
         <dl className="flex flex-wrap items-end gap-x-8 gap-y-3">
           <div>
             <dt className="font-display text-[13px] font-bold text-ink-2">{t(locale, "workspace.agreed")}</dt>
-            <dd className="mt-1.5 font-display text-[24px] leading-none font-bold text-ink-2 tabular-nums">{formatMoney(locale, totals.agreedCents)}</dd>
+            {/* Bottom-aligned with the 44 px total; the 5 px lifts this 24 px figure onto the same baseline. */}
+            <dd className="mt-1.5 pb-[5px] font-display text-[24px] leading-none font-bold text-ink-2 tabular-nums">{formatMoney(locale, totals.agreedCents)}</dd>
           </div>
           <div data-testid="header-total" data-fx-total="" data-tone={tone}>
             <dt className="font-display text-[13px] font-bold text-ink-2">{t(locale, "workspace.totalWithChanges")}</dt>

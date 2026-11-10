@@ -35,7 +35,6 @@ export const en = {
     saveFailed: "The client's language couldn't be saved. Try again.",
   },
   workspace: {
-    previewLabel: "View-only demo", // names the region around the page.previewOnly notice
     agreed: "Agreed",
     totalWithChanges: "Total with changes",
     notPaidYet: "{amount} not paid yet",
@@ -197,19 +196,34 @@ export const en = {
   guide: {
     summaryTitle: "How this demo works.",
     summaryText: "Tollgate finds the extra work hiding in a client's message and bills it through PayPal before you build it.",
-    show: "Show",
-    hide: "Hide",
-    step1Live: "Paste a new message from {client}, or press <b>Use a sample message</b>, then <b>Check scope</b>.",
+    show: "Show details",
+    hide: "Hide details",
+    stepsLabel: "Steps", // names the one-line list of the three steps
+    // The one-line steps. A <link> jumps to the control it names (or to the marked request) and focuses it.
+    quick1Live: "<link>Check scope</link> on a client message",
+    quick1Target: "Open the <link>marked request</link>",
+    quick1NoTarget: "See the requests already marked",
+    quick2: "Claude prices the extra work",
+    quick3: "<link>Send change order</link> as a PayPal invoice",
+    quick1ReadOnly: "Read the <link>marked request</link>",
+    quick2ReadOnly: "See its ticket and price",
+    quick3ReadOnly: "Reload later to send one yourself",
+    previewNotice: "<b>View-only right now:</b> too many new demos were started recently. Reload in a few minutes to get your own copy.",
+    step1Live: "<link>Go to the message box</link>, paste a new message from {client} or press “Use a sample message”, then press “Check scope”.",
     step1Target:
       "Live Claude checks are off on this public demo. {author}'s {sentOn} message already has a <link>marked request</link> — start at step 3.",
     step1NoTarget:
       "Live Claude checks are off on this public demo. The requests already marked in {client}'s messages show what a check finds; <b>Reset demo</b> brings back one to send.",
+    step1ReadOnly:
+      "Nothing can be checked or sent in this view. The requests already marked in {client}'s messages show what a check finds.",
     step2:
       "Claude marks what the agreed scope doesn't cover and estimates the hours. The price is your hourly rate times those hours. Nothing is sent yet.",
     step3:
-      "Press <b>Send change order</b> to send a PayPal sandbox invoice. When the client pays it, the work unlocks, the launch moves, and the total turns green.",
-    goToOrder: "Go to the change order",
+      "Press <link>Send change order</link> to send a PayPal sandbox invoice. When the client pays it, the work unlocks, the launch moves, and the total turns green.",
+    step3ReadOnly:
+      "Each ticket shows the PayPal sandbox invoice it would send and keeps its work locked until it is paid. Reload in a few minutes to get your own copy and send one.",
     footer: "This copy is yours alone; <b>Reset demo</b> puts it back. PayPal runs in sandbox mode, so no real money moves.",
+    footerReadOnly: "Nothing you do in this view is saved. PayPal runs in sandbox mode, so no real money moves.",
   },
   reset: {
     reset: "Reset demo",

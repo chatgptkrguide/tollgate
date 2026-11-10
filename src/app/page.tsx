@@ -1,6 +1,7 @@
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { connection } from "next/server";
 import { Suspense, type ReactElement } from "react";
+import { GUIDE_COOKIE, isGuideOpen } from "@/components/guide-state";
 import { Workspace } from "@/components/Workspace";
 import { WorkspaceSkeleton } from "@/components/WorkspaceSkeleton";
 import type { Locale } from "@/i18n/locales";
@@ -49,13 +50,14 @@ async function VisitorWorkspace(): Promise<ReactElement> {
   // Everything below needs a real request: the clock, random ids, and the copy's database writes.
   await connection();
 
+  const guideOpen = isGuideOpen((await cookies()).get(GUIDE_COOKIE)?.value);
   const db = getDb();
   const mayCreate = demoCopyGate(clientAddress(await headers()));
   const { data, preview } = await openVisitorWorkspace(db, visitorId, new Date(), { mayCreate });
   if (preview) {
     // The seed from memory: no row exists, so there is no activity to read and every action would answer not_found.
     const reason = t(locale, "page.previewOnly");
-    return <Workspace data={data} activity={[]} sendBlockedReason={reason} reviewBlockedReason={reason} previewReason={reason} locale={locale} />;
+    return <Workspace data={data} activity={[]} sendBlockedReason={reason} reviewBlockedReason={reason} previewReason={reason} guideOpen={guideOpen} locale={locale} />;
   }
   const activity = await listActivity(db, data.project.id);
   return (
@@ -65,6 +67,7 @@ async function VisitorWorkspace(): Promise<ReactElement> {
       sendBlockedReason={paypalConfig() ? null : t(locale, "page.sendBlocked")}
       reviewBlockedReason={env().ANTHROPIC_API_KEY ? null : t(locale, "page.reviewBlocked")}
       previewReason={null}
+      guideOpen={guideOpen}
       locale={locale}
     />
   );

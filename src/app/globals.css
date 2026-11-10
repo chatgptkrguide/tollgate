@@ -319,12 +319,16 @@ html:lang(ja) {
 .lane-caption {
   position: absolute;
   left: 48px;
+  right: 34px; /* clear of the arm's rest; a caption too long for a narrow phone ends in an ellipsis, never under it */
   bottom: 5px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  overflow: hidden;
+  font-size: 13px;
+  letter-spacing: 0.02em;
   color: var(--color-ink-2);
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .ticket[data-gate="up"] .lane-arm {
   transform: rotate(-80deg);
