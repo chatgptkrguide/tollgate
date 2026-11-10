@@ -8,13 +8,14 @@ import type { PayPalError } from "./paypal/errors";
 // A failed PayPal call as the owner sees it (an activity step) and as the action answers it. Shared by billing.ts
 // and payments.ts; it lives apart from both so that neither has to import the other (P3-D2).
 
-export type PayPalStep = "create" | "send" | "read" | "cancel";
+export type PayPalStep = "create" | "send" | "read" | "cancel" | "record";
 
 const stepText: Record<PayPalStep, string> = {
   create: "creating the invoice",
   send: "sending the invoice",
   read: "reading the invoice back",
   cancel: "cancelling the invoice",
+  record: "recording the sandbox payment",
 };
 
 // What a refusal at each step leaves behind. Once the invoice was sent, nothing may claim that nothing happened.
@@ -23,6 +24,7 @@ const refusalMeans: Record<PayPalStep, string> = {
   send: "it wasn't sent",
   read: "it was sent but couldn't be confirmed",
   cancel: "the invoice is still open",
+  record: "no payment was recorded",
 };
 
 export function failureSummary(error: PayPalError, step: PayPalStep): string {

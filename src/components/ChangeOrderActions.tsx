@@ -1,9 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useId, useRef, useState, type MouseEvent, type RefObject } from "react";
 import { flushSync } from "react-dom";
-import { cancelChangeOrder, checkPayment, requoteChangeOrder, sendChangeOrder, waiveChangeOrder } from "@/app/actions";
+import { cancelChangeOrder, checkPayment, requoteChangeOrder, sendChangeOrder, simulateClientPayment, waiveChangeOrder } from "@/app/actions";
+import { awaitPaymentPoller } from "@/components/await-payment";
 import type { ActionError, ActionResult, BillingActionResult, PayPalActionError } from "@/domain/action-result";
+import { SANDBOX_PAYMENT_LIMITS_PER_COPY } from "@/domain/sandbox-payment-limit";
 import { SEND_LIMITS_PER_COPY } from "@/domain/send-limit";
 import type { ChangeOrder } from "@/domain/types";
 import type { Locale } from "@/i18n/locales";
@@ -18,19 +21,29 @@ export interface ChangeOrderActionsProps {
   sendBlockedReason: string | null; // why PayPal actions are off (no keys on this server); null when they work
   // The read-only preview (no copy exists): including for free and quoting again are off too, with the same reason.
   readOnly: boolean;
+  sandbox: boolean; // the server talks to the PayPal sandbox, so the simulated-payment shortcut is offered
+
   statusLineId: string; // the note's status line (role="status", tabIndex -1), focused after an action succeeds
   locale: Locale;
 }
 
 const COPY_SEND_MAX = SEND_LIMITS_PER_COPY[0].max;
+const COPY_SANDBOX_PAYMENT_MAX = SANDBOX_PAYMENT_LIMITS_PER_COPY[0].max;
 
-// Error codes the cancel and check buttons explain in their own words; every other code reads as changeOrderErrors.
+// Error codes the cancel, check and simulate buttons explain in their own words; every other code reads as
+// changeOrderErrors.
 const CANCEL_ERRORS = ["paypal_unavailable", "paypal_rejected", "paypal_unconfirmed", "not_configured"] as const;
 const CHECK_ERRORS = ["paypal_unavailable", "paypal_rejected", "not_configured"] as const;
-type ErrorGroup = "changeOrderErrors" | "cancelErrors" | "checkErrors";
+const SIMULATE_ERRORS = ["paypal_unavailable", "paypal_rejected", "not_configured", "already_paid", "rate_limited", "invoice_changed"] as const;
+type ErrorGroup = "changeOrderErrors" | "cancelErrors" | "checkErrors" | "simulateErrors";
 
 function errorMessage(locale: Locale, group: ErrorGroup, code: ActionError | PayPalActionError): string {
   const max = { max: COPY_SEND_MAX };
+  if (group === "simulateErrors") {
+    if (code === "copy_rate_limited") return t(locale, "simulateErrors.copy_rate_limited", { max: COPY_SANDBOX_PAYMENT_MAX });
+    const own = SIMULATE_ERRORS.find((c) => c === code);
+    if (own) return t(locale, `simulateErrors.${own}`);
+  }
   if (group === "cancelErrors") {
     const own = CANCEL_ERRORS.find((c) => c === code);
     if (own) return t(locale, `cancelErrors.${own}`);
@@ -51,6 +64,11 @@ function Busy() {
   return <span aria-hidden="true" className="btn-progress" />;
 }
 
+// A spinning ring before the label of a button whose PayPal call takes a few seconds.
+function Spinner() {
+  return <span aria-hidden="true" className="btn-spinner" />;
+}
+
 // The pressed button is about to disappear (the note changes state), so focus goes to the status line,
 // and the screen reader reads the new status.
 function useFocusOnSuccess(state: ActionResult | BillingActionResult | null, statusLineId: string) {
@@ -62,7 +80,7 @@ function useFocusOnSuccess(state: ActionResult | BillingActionResult | null, sta
 // The buttons under a change order: send or include at no charge (draft), send again (a draft PayPal already has an
 // invoice for), the client's PayPal page, check payment and cancel (sent), quote again (cancelled). The browser sends
 // only the order id; the server decides the rest.
-export function ChangeOrderActions({ order, sendBlockedReason, readOnly, statusLineId, locale }: ChangeOrderActionsProps) {
+export function ChangeOrderActions({ order, sendBlockedReason, readOnly, sandbox, statusLineId, locale }: ChangeOrderActionsProps) {
   // Every hook stays here, whatever the status, so the component stays mounted through the refresh after an
   // action and can move focus once the new status arrives.
   const [waiveState, waiveAction, waiving] = useActionState(waiveChangeOrder, null);
@@ -70,6 +88,8 @@ export function ChangeOrderActions({ order, sendBlockedReason, readOnly, statusL
   const [cancelState, cancelAction, cancelling] = useActionState(cancelChangeOrder, null);
   const [requoteState, requoteAction, requoting] = useActionState(requoteChangeOrder, null);
   const [checkState, checkAction, checking] = useActionState(checkPayment, null);
+  const [simulateState, simulateAction, simulating] = useActionState(simulateClientPayment, null);
+  const router = useRouter();
   // Which confirmation is open, for which order: quoting again gives this note a new order.
   const [confirming, setConfirming] = useState<{ step: "waive" | "cancel"; orderId: string } | null>(null);
   const sendRef = useRef<HTMLButtonElement>(null);
@@ -81,6 +101,7 @@ export function ChangeOrderActions({ order, sendBlockedReason, readOnly, statusL
   const confirmId = useId();
   const cancelConfirmId = useId();
   const resendId = useId();
+  const simulateHelpId = useId();
 
   useFocusOnSuccess(waiveState, statusLineId);
   useFocusOnSuccess(sendState, statusLineId);
@@ -95,6 +116,16 @@ export function ChangeOrderActions({ order, sendBlockedReason, readOnly, statusL
   useEffect(() => {
     if (waiveState?.ok === false && waiveState.error === "invoice_exists") sendRef.current?.focus();
   }, [waiveState]);
+  // A sandbox payment was recorded and the ticket isn't paid yet: re-read the page until PayPal's webhook lands (at most
+  // 90 s, and not while the page is hidden). The ticket turning paid ends it.
+  const awaitingWebhook = simulateState?.ok === true && order.status === "sent";
+  useEffect(() => {
+    if (!awaitingWebhook) return;
+    return awaitPaymentPoller(
+      () => router.refresh(),
+      () => document.visibilityState === "hidden",
+    );
+  }, [awaitingWebhook, router]);
 
   const blocked = sendBlockedReason !== null;
   const isConfirming = (step: "waive" | "cancel") => confirming?.step === step && confirming.orderId === order.id;
@@ -151,14 +182,21 @@ export function ChangeOrderActions({ order, sendBlockedReason, readOnly, statusL
               ref={sendRef}
               type="submit"
               aria-disabled={blocked || sending || undefined}
+              aria-busy={sending || undefined}
               aria-describedby={sendDescribedBy}
               onClick={submitOnce(blocked || sending)}
+              data-busy={sending || undefined}
               className={`${PRIMARY} ${blocked ? "aria-disabled:cursor-not-allowed" : "aria-disabled:cursor-wait"}`}
             >
+              {sending && <Spinner />}
               {sending ? t(locale, "changeOrder.sending") : resend ? t(locale, "changeOrder.sendAgain") : t(locale, "changeOrder.send")}
               {sending && <Busy />}
             </button>
           </form>
+          {/* Creating and sending takes a few seconds (two or three PayPal calls); screen readers hear it once. */}
+          <p aria-live="polite" className="sr-only">
+            {sending ? t(locale, "changeOrder.sending") : ""}
+          </p>
           {!resend && (
             <form action={waiveAction} data-action="waive" className="flex flex-wrap gap-2">
               <input type="hidden" name="changeOrderId" value={order.id} />
@@ -259,6 +297,28 @@ export function ChangeOrderActions({ order, sendBlockedReason, readOnly, statusL
               {checking && <Busy />}
             </button>
           </form>
+          {/* Sandbox shortcut for a judge without a buyer login: PayPal records the payment, its webhook settles it. */}
+          {sandbox && (
+            <form action={simulateAction} data-action="simulate-payment">
+              <input type="hidden" name="changeOrderId" value={order.id} />
+              <button
+                type="submit"
+                aria-disabled={blocked || simulating || undefined}
+                aria-busy={simulating || undefined}
+                aria-describedby={[simulateHelpId, blocked && reasonId].filter(Boolean).join(" ")}
+                onClick={submitOnce(blocked || simulating)}
+                className={`${SECONDARY} ${blocked ? "aria-disabled:cursor-not-allowed" : "aria-disabled:cursor-wait"}`}
+              >
+                {simulating && <Spinner />}
+                {simulating ? t(locale, "changeOrder.simulating") : t(locale, "changeOrder.simulatePayment")}
+                <span aria-hidden="true" className="sandbox-tag">
+                  {t(locale, "changeOrder.sandboxTag")}
+                </span>
+                <span className="sr-only"> ({t(locale, "changeOrder.sandboxTag")})</span>
+                {simulating && <Busy />}
+              </button>
+            </form>
+          )}
           <form action={cancelAction} data-action="cancel" className="flex flex-wrap gap-2">
             <input type="hidden" name="changeOrderId" value={order.id} />
             {confirmingCancel ? (
@@ -306,7 +366,19 @@ export function ChangeOrderActions({ order, sendBlockedReason, readOnly, statusL
             {t(locale, "changeOrder.cancelConfirmHelp")}
           </p>
         )}
+        {sandbox && (
+          <p id={simulateHelpId} className="mt-3 text-[14px] leading-relaxed text-ink-2">
+            {t(locale, "changeOrder.simulateHelp")}
+          </p>
+        )}
         {reason}
+        {/* Recorded in PayPal, not paid here yet: a calm status line, while the page re-reads until the webhook lands. */}
+        {simulateState?.ok && (
+          <p role="status" data-testid="simulate-status" className="mt-3 border-l-2 border-line pl-3 text-[14px] leading-relaxed font-semibold text-ink">
+            {t(locale, "changeOrder.simulateRecorded")}
+          </p>
+        )}
+        {errorFor(simulateState, "simulateErrors")}
         {errorFor(checkState, "checkErrors")}
         {errorFor(cancelState, "cancelErrors")}
       </div>

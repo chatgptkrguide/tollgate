@@ -87,7 +87,7 @@ export const ko = {
   changeOrder: {
     send: "추가 견적 보내기",
     sendAgain: "다시 보내기",
-    sending: "보내는 중…",
+    sending: "PayPal 청구서를 만들어 보내는 중…",
     includeFree: "무료로 포함",
     keepCharge: "청구 유지",
     confirmWaive: "확인: 무료로 포함",
@@ -107,6 +107,11 @@ export const ko = {
     cancelConfirmHelp: "PayPal이 청구서를 취소하고, 클라이언트는 더 이상 결제할 수 없어요. 취소한 뒤 다시 견적을 낼 수 있어요.",
     quoteAgain: "다시 견적 내기",
     quoting: "견적 내는 중…",
+    simulatePayment: "클라이언트 결제 시뮬레이션",
+    simulating: "PayPal에 결제를 기록하는 중…",
+    sandboxTag: "샌드박스",
+    simulateHelp: "샌드박스 지름길: Tollgate가 클라이언트가 낸 것처럼 PayPal API로 결제를 기록해요. 티켓은 PayPal의 서명된 웹훅이 와야 결제 완료로 바뀌어요.",
+    simulateRecorded: "PayPal 샌드박스에 결제를 기록했어요. PayPal의 서명된 웹훅을 기다리는 중이에요 — 보통 1분 안에 와요. 결제 확인을 누르면 지금 바로 읽어요.",
   },
   changeOrderErrors: {
     invalid_input: "이 추가 견적은 내 데모에 없어요. 페이지를 새로고침하세요.",
@@ -126,6 +131,8 @@ export const ko = {
     copy_rate_limited: "내 데모는 최근 24시간 동안 PayPal 발송 {max}회를 다 썼어요. 아무것도 보내지 않았고, 초기화해도 횟수는 그대로예요.",
     not_paid_yet: "PayPal에서 아직 전액 결제로 보이지 않아요. 클라이언트가 결제한 뒤 다시 확인하세요.",
     invoice_changed: "PayPal의 청구서 금액이 달라서 결제 완료로 표시하지 않았어요. PayPal에서 확인해 주세요.",
+    sandbox_only: "이 서버는 PayPal 샌드박스가 아니라서 결제를 시뮬레이션하지 않았어요.",
+    not_payable: "PayPal에서 이 청구서가 결제 대기 상태가 아니라서 결제를 기록하지 않았어요. 결제 확인을 눌러 상태를 보세요.",
   },
   cancelErrors: {
     paypal_unavailable: "PayPal이 응답하지 않아 청구서가 아직 열려 있을 수 있어요. 다시 시도하세요.",
@@ -137,6 +144,15 @@ export const ko = {
     paypal_unavailable: "PayPal이 응답하지 않아 결제를 확인하지 못했어요. 다시 시도하세요.",
     paypal_rejected: "PayPal이 이 청구서를 보여 주지 않아 결제를 확인하지 못했어요.",
     not_configured: "이 서버에 PayPal이 설정되지 않아 결제를 확인하지 못했어요.",
+  },
+  simulateErrors: {
+    paypal_unavailable: "PayPal이 응답하지 않았어요. 다시 시도하세요. PayPal은 결제된 청구서에 두 번째 결제를 기록하지 않아요.",
+    paypal_rejected: "PayPal이 결제 기록을 거절해서 아무것도 바뀌지 않았어요.",
+    not_configured: "이 서버에 PayPal이 설정되지 않아 결제를 기록하지 않았어요.",
+    already_paid: "PayPal에 이 청구서가 이미 결제됨으로 나와서 두 번째 결제는 기록하지 않았어요. 결제 확인을 눌러 페이지를 갱신하세요.",
+    rate_limited: "데모 서버가 오늘 모든 방문자를 합쳐 기록할 수 있는 샌드박스 결제를 다 썼어요. 대신 PayPal 페이지에서 클라이언트처럼 결제해 보세요.",
+    copy_rate_limited: "내 데모가 최근 24시간 동안 결제 시뮬레이션 {max}번을 다 썼어요. 대신 PayPal 페이지에서 클라이언트처럼 결제해 보세요.",
+    invoice_changed: "PayPal의 청구서 금액이 달라서 결제를 기록하지 않았어요. PayPal에서 확인해 주세요.",
   },
   composer: {
     label: "{client}에게서 온 새 메시지",

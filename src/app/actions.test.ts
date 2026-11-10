@@ -9,7 +9,8 @@ import { runMigrations } from "@/server/db/migrate";
 import { changeOrders, projects } from "@/server/db/schema";
 import { PayPalError } from "@/server/paypal/errors";
 import { newVisitorId, VISITOR_COOKIE } from "@/server/visitor";
-import { cancelChangeOrder, checkPayment, requoteChangeOrder, resetDemo, reviewMessage, sendChangeOrder, setClientLocale, waiveChangeOrder } from "./actions";
+import type { SandboxPayPal } from "@/server/sandbox-payment";
+import { cancelChangeOrder, checkPayment, requoteChangeOrder, resetDemo, reviewMessage, sendChangeOrder, setClientLocale, simulateClientPayment, waiveChangeOrder } from "./actions";
 
 // Only the framework edges are replaced: the request's cookies, the router refresh, which database to use,
 // and which PayPal to talk to (a stand-in; the real one is never called from unit tests).
@@ -17,6 +18,7 @@ const request = vi.hoisted(() => ({
   cookies: new Map<string, string>(),
   db: null as Db | null,
   paypal: null as InvoiceGateway | null,
+  sandbox: null as SandboxPayPal | null,
 }));
 
 vi.mock("next/headers", () => ({
@@ -33,6 +35,13 @@ vi.mock("@/server/billing", async (importOriginal) => ({
   liveBillingDeps: () => {
     if (!request.db) throw new Error("test database not set");
     return { db: request.db, paypal: request.paypal, now: () => new Date() };
+  },
+}));
+vi.mock("@/server/sandbox-payment", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/server/sandbox-payment")>()),
+  liveSandboxPaymentDeps: () => {
+    if (!request.db) throw new Error("test database not set");
+    return { db: request.db, paypal: request.sandbox, now: () => new Date() };
   },
 }));
 vi.mock("@/server/db/client", async (importOriginal) => ({
@@ -565,6 +574,51 @@ describe("서버 액션: 발송·취소·다시 견적", () => {
 
     expect(result).toEqual({ ok: false, error: "not_found" });
     expect(reads).toEqual([]);
+  });
+
+  describe("결제 시뮬레이션 액션 (샌드박스)", () => {
+    let recorded: { invoiceId: string; amountValue: string }[];
+    beforeEach(() => {
+      recorded = [];
+      request.sandbox = {
+        environment: "sandbox",
+        get: async (id) => ({ id, status: "SENT", invoiceNumber: null, reference: null, amountValue: "650.00", currencyCode: "USD", payerViewUrl: null }),
+        recordPayment: async (invoiceId, payment) => {
+          recorded.push({ invoiceId, amountValue: payment.amountValue });
+          return "recorded";
+        },
+      };
+    });
+
+    it("보낸 내 견적이면 PayPal에 전액을 기록하고 화면을 새로 고치지만, 견적은 sent 그대로다(폼의 금액은 무시)", async () => {
+      signIn(me);
+      const draft = await draftOf(mine);
+      await sendChangeOrder(null, form({ changeOrderId: draft.id }));
+      request.sandbox = { ...request.sandbox!, get: async (id) => ({ id, status: "SENT", invoiceNumber: null, reference: draft.id, amountValue: "650.00", currencyCode: "USD", payerViewUrl: null }) };
+      vi.mocked(refresh).mockClear();
+
+      const result = await simulateClientPayment(null, form({ changeOrderId: draft.id, amountCents: "1", status: "paid" }));
+
+      expect(result).toEqual({ ok: true });
+      expect(recorded).toEqual([{ invoiceId: "INV2-DZQM-QREH-7LAT-F7YR", amountValue: "650.00" }]);
+      expect(await statusOf(draft.id)).toBe("sent");
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("쿠키가 없거나 다른 사본의 견적이면 not_found, 형식이 틀리면 invalid_input이고 PayPal에 기록하지 않는다", async () => {
+      const theirDraft = await draftOf(theirs);
+      const anonymous = await simulateClientPayment(null, form({ changeOrderId: theirDraft.id }));
+      signIn(me);
+
+      const results = [anonymous, await simulateClientPayment(null, form({ changeOrderId: theirDraft.id })), await simulateClientPayment(null, form({ changeOrderId: "x" }))];
+
+      expect(results).toEqual([
+        { ok: false, error: "not_found" },
+        { ok: false, error: "not_found" },
+        { ok: false, error: "invalid_input" },
+      ]);
+      expect(recorded).toEqual([]);
+    });
   });
 });
 

@@ -22,6 +22,8 @@ export type ResetActionResult = { ok: true } | { ok: false; error: ResetError };
 // copy_rate_limited: this copy's own send cap is reached (resetting it doesn't lift it), so PayPal wasn't called
 // not_paid_yet: PayPal doesn't show the invoice as paid in full · invoice_changed: PayPal's invoice has a different
 // reference, amount or currency than the order, so it wasn't marked paid
+// sandbox_only: this server isn't on the PayPal sandbox, so no payment is simulated · not_payable: PayPal doesn't show the
+// invoice as waiting for payment (part paid, pending or cancelled there), so no payment was recorded
 export const PAYPAL_ACTION_ERRORS = [
   "in_progress",
   "paypal_unavailable",
@@ -35,6 +37,8 @@ export const PAYPAL_ACTION_ERRORS = [
   "copy_rate_limited",
   "not_paid_yet",
   "invoice_changed",
+  "sandbox_only",
+  "not_payable",
 ] as const;
 export type PayPalActionError = (typeof PAYPAL_ACTION_ERRORS)[number];
 export type BillingActionResult = { ok: true } | { ok: false; error: ActionError | PayPalActionError };

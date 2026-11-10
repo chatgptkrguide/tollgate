@@ -99,7 +99,7 @@ export const en = {
   changeOrder: {
     send: "Send change order",
     sendAgain: "Send again",
-    sending: "Sending…",
+    sending: "Creating and sending the PayPal invoice…",
     includeFree: "Include at no charge",
     keepCharge: "Keep the charge",
     confirmWaive: "Confirm: include at no charge",
@@ -119,6 +119,11 @@ export const en = {
     cancelConfirmHelp: "PayPal will cancel the invoice and the client can no longer pay it. You can quote this again afterwards.",
     quoteAgain: "Quote again",
     quoting: "Quoting…",
+    simulatePayment: "Simulate the client's payment",
+    simulating: "Recording the payment in PayPal…",
+    sandboxTag: "Sandbox",
+    simulateHelp: "Sandbox shortcut: Tollgate records the payment through PayPal's API, as if the client paid. The ticket still turns Paid only when PayPal's signed webhook arrives.",
+    simulateRecorded: "Payment recorded in the PayPal sandbox. Waiting for PayPal's signed webhook — this usually takes under a minute. Check payment reads it now.",
   },
   changeOrderErrors: {
     invalid_input: "This change order isn't in your demo copy. Reload the page.",
@@ -141,6 +146,8 @@ export const en = {
       "Your demo copy has used its {max} PayPal sends for the last 24 hours, so nothing was sent; resetting it doesn't change that.",
     not_paid_yet: "PayPal doesn't show this invoice as fully paid yet. Check again after the client pays.",
     invoice_changed: "PayPal shows a different amount for this invoice, so it wasn't marked paid. Check it in PayPal.",
+    sandbox_only: "This server isn't on the PayPal sandbox, so no payment was simulated.",
+    not_payable: "PayPal doesn't show this invoice as waiting for payment, so no payment was recorded. Press Check payment to see where it stands.",
   },
   cancelErrors: {
     paypal_unavailable: "PayPal didn't respond, so the invoice may still be open. Try again.",
@@ -153,6 +160,15 @@ export const en = {
     paypal_unavailable: "PayPal didn't respond, so the payment couldn't be checked. Try again.",
     paypal_rejected: "PayPal refused to show this invoice, so the payment couldn't be checked.",
     not_configured: "PayPal isn't set up on this server, so the payment couldn't be checked.",
+  },
+  simulateErrors: {
+    paypal_unavailable: "PayPal didn't respond. Try again; PayPal never records a second payment on a paid invoice.",
+    paypal_rejected: "PayPal refused to record the payment, so nothing changed.",
+    not_configured: "PayPal isn't set up on this server, so no payment was recorded.",
+    already_paid: "PayPal already shows this invoice as paid, so no second payment was recorded. Press Check payment to update the page.",
+    rate_limited: "The demo server has recorded as many sandbox payments as it may today, across all visitors. Pay as the client on PayPal's page instead.",
+    copy_rate_limited: "Your demo copy has used its {max} simulated payments for the last 24 hours. Pay as the client on PayPal's page instead.",
+    invoice_changed: "PayPal shows a different amount for this invoice, so no payment was recorded. Check it in PayPal.",
   },
   composer: {
     label: "New message from {client}",

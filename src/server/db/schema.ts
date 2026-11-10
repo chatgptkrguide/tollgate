@@ -176,6 +176,20 @@ export const claudeCalls = sqliteTable(
   (t) => [index("claude_calls_at_idx").on(t.at), index("claude_calls_project_idx").on(t.projectId, t.at)],
 );
 
+// Every sandbox payment the server recorded through PayPal's API for "Simulate the client's payment", for the caps per
+// copy and per server (domain/sandbox-payment-limit.ts). No foreign key, like paypal_sends: a demo reset must not hand
+// a visitor a fresh allowance. Rows older than a day are pruned.
+export const sandboxPayments = sqliteTable(
+  "sandbox_payments",
+  {
+    id: integer().primaryKey({ autoIncrement: true }),
+    changeOrderId: text("change_order_id").notNull(),
+    projectId: text("project_id").notNull(),
+    at: text().notNull(),
+  },
+  (t) => [index("sandbox_payments_at_idx").on(t.at), index("sandbox_payments_project_idx").on(t.projectId, t.at)],
+);
+
 // The steps shown in the activity panel, written in the same batch as the change they describe.
 // No CHECK on kind or actor: later phases add kinds, and SQLite can only change a CHECK by rebuilding the table.
 export const activityEvents = sqliteTable(
