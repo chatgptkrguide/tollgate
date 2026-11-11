@@ -22,7 +22,12 @@ interface LockMarkProps {
 
 interface RoadProps {
   plan: DeliveryPlan;
-  rows: readonly DeliveryRow[];
+  locale: Locale;
+  compact?: boolean; // the result rail's road: no launch label over the gate (the rail shows the date beside it)
+}
+
+interface LaunchDateProps {
+  plan: DeliveryPlan;
   locale: Locale;
 }
 
@@ -49,45 +54,26 @@ const inLaunchFirst = (rows: readonly DeliveryRow[]) => [...rows.filter((r) => r
 // The product's promise as a road: from the agreed launch, each change order is a stretch of days. Locked stretches
 // carry barrier stripes until paid; paid ones are solid GO, included ones grey. The launch date sits at the gate
 // between them. Everything comes from domain/delivery.ts; this only draws it, and each row says its state in words.
+// The launch date and, on a wide screen, the road are shown in the result rail at the top of the column (ResultRail);
+// this panel keeps the per-order lock list.
 export function DeliveryPanel({ plan, locale, className = "" }: DeliveryPanelProps) {
-  const agreed = formatDate(locale, plan.agreedLaunch);
-  const launch = formatDate(locale, plan.launch);
   const rows = inLaunchFirst(plan.rows);
 
   return (
     <section aria-labelledby="delivery-title" className={`rounded-[10px] border border-line bg-surface px-5 py-5 ${className}`} data-testid="delivery-panel">
-      {/* The launch moves under the title when both don't fit side by side (long dates in some languages). */}
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div className="min-w-0 flex-1 basis-48">
-          <h2 id="delivery-title" className="font-display text-[20px] leading-tight font-bold">
-            {t(locale, "delivery.title")}
-          </h2>
-          <p className="mt-1 text-[14px] text-ink-2">{t(locale, "delivery.lead")}</p>
-        </div>
-        <dl className="ml-auto shrink-0 text-right" data-testid="delivery-launch" data-fx-launch="">
-          <dt className="font-display text-[13px] font-bold text-ink-2">{t(locale, "delivery.launch")}</dt>
-          <dd className="font-mono text-[20px] leading-tight font-semibold">
-            {plan.moved ? (
-              <>
-                <span className="sr-only">{t(locale, "delivery.movedForScreenReaders", { agreed, launch })}</span>
-                <span aria-hidden="true">
-                  <s className="launch-was text-[15px] font-normal text-ink-2 decoration-ink-2">{agreed}</s>
-                  <span className="mx-1.5 text-[15px] font-normal text-ink-2">→</span>
-                  <span className="launch-now">{launch}</span>
-                </span>
-              </>
-            ) : (
-              <span className="launch-now">{launch}</span>
-            )}
-          </dd>
-        </dl>
-      </div>
+      <h2 id="delivery-title" className="font-display text-[20px] leading-tight font-bold">
+        {t(locale, "delivery.title")}
+      </h2>
+      <p className="mt-1 text-[14px] text-ink-2">{t(locale, "delivery.lead")}</p>
 
       {rows.length === 0 ? (
         <p className="mt-4 border-t border-line pt-3 text-[14px] leading-relaxed text-ink-2">{t(locale, "delivery.noOrders")}</p>
       ) : (
         <>
-          <Road plan={plan} rows={rows} locale={locale} />
+          {/* Below 1024 px the result rail is one line without the road, so the road stays here. */}
+          <div className="lg:hidden">
+            <Road plan={plan} locale={locale} />
+          </div>
           <ul className="mt-4 divide-y divide-line border-t border-line">
             {rows.map((row) => (
               <DeliveryItem key={row.orderId} row={row} locale={locale} />
@@ -105,8 +91,37 @@ export function DeliveryPanel({ plan, locale, className = "" }: DeliveryPanelPro
   );
 }
 
-// Decorative: the rows below say the same in words.
-function Road({ plan, rows, locale }: RoadProps) {
+// The launch date, with the agreed one struck through once it moved. On a phone's one-line rail only the new date
+// shows; the screen reader text says both either way.
+export function LaunchDate({ plan, locale }: LaunchDateProps) {
+  const agreed = formatDate(locale, plan.agreedLaunch);
+  const launch = formatDate(locale, plan.launch);
+
+  return (
+    <dl className="shrink-0 lg:text-right" data-testid="delivery-launch" data-fx-launch="">
+      <dt className="font-display text-[13px] font-bold text-ink-2 max-lg:inline max-lg:pr-1.5">{t(locale, "delivery.launch")}</dt>
+      <dd className="font-mono text-[15px] leading-tight font-semibold max-lg:inline lg:mt-1.5 lg:text-[17px]">
+        {plan.moved ? (
+          <>
+            <span className="sr-only">{t(locale, "delivery.movedForScreenReaders", { agreed, launch })}</span>
+            <span aria-hidden="true">
+              <s className="launch-was text-[12px] font-normal text-ink-2 decoration-ink-2 max-lg:hidden">{agreed}</s>
+              <span className="mx-1 text-[12px] font-normal text-ink-2 max-lg:hidden">→</span>
+              <span className="launch-now">{launch}</span>
+            </span>
+          </>
+        ) : (
+          <span className="launch-now">{launch}</span>
+        )}
+      </dd>
+    </dl>
+  );
+}
+
+// Decorative: the Delivery rows say the same in words.
+export function Road({ plan, locale, compact = false }: RoadProps) {
+  const rows = inLaunchFirst(plan.rows);
+  if (rows.length === 0) return null;
   const weight = (row: DeliveryRow) => Math.max(row.days, 1);
   const total = rows.reduce((sum, row) => sum + weight(row), 0);
   const inLaunch = rows.filter((row) => row.state !== "locked").reduce((sum, row) => sum + weight(row), 0);
@@ -116,13 +131,15 @@ function Road({ plan, rows, locale }: RoadProps) {
   const gateLabel: CSSProperties = gateAt <= 50 ? { left: `${gateAt}%` } : { right: `${100 - gateAt}%` };
 
   return (
-    <div aria-hidden="true" className="mt-5 font-mono text-[12px] text-ink-2">
-      <div className="relative h-5">
-        <span className="absolute bottom-0 whitespace-nowrap text-ink" style={gateLabel}>
-          <Rich parts={tRich(locale, "delivery.roadLaunch", { date: formatDate(locale, plan.launch) })} boldClassName="font-semibold" />
-        </span>
-      </div>
-      <div className="relative mt-1 flex items-center gap-[3px]">
+    <div aria-hidden="true" className={`${compact ? "mt-2" : "mt-5"} font-mono text-[12px] text-ink-2`}>
+      {!compact && (
+        <div className="relative mb-1 h-5">
+          <span className="absolute bottom-0 whitespace-nowrap text-ink" style={gateLabel}>
+            <Rich parts={tRich(locale, "delivery.roadLaunch", { date: formatDate(locale, plan.launch) })} boldClassName="font-semibold" />
+          </span>
+        </div>
+      )}
+      <div className="relative flex items-center gap-[3px]">
         <span className="h-6 w-[3px] shrink-0 rounded-sm bg-ink" />
         {rows.map((row) => (
           <span key={row.orderId} className="road-seg" data-state={row.state} data-fx-order={row.orderId} style={{ flexGrow: weight(row), flexBasis: 0 }}>
@@ -134,7 +151,7 @@ function Road({ plan, rows, locale }: RoadProps) {
           <span className={`absolute -top-1.5 -left-[3px] h-[9px] w-[9px] rounded-full ${hasLocked ? "bg-stop" : "bg-go"}`} />
         </span>
       </div>
-      <div className="mt-2 flex justify-between gap-4">
+      <div className={`${compact ? "mt-1.5" : "mt-2"} flex justify-between gap-4`}>
         <span>{t(locale, "delivery.roadAgreed", { date: formatDate(locale, plan.agreedLaunch) })}</span>
         {hasLocked && <span className="text-right">{t(locale, "delivery.roadIfPaid", { date: formatDate(locale, plan.launchIfPaid) })}</span>}
       </div>
