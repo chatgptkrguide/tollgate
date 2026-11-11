@@ -37,12 +37,14 @@ interface SegmentProps {
 }
 
 // The thread as a chat: the client's messages on the left, yours on the right, the composer at the bottom. On a wide
-// screen the column sticks under the app bar and scrolls on its own, so the composer stays in reach.
+// screen the column sticks under the app bar and scrolls on its own, so the composer stays in reach. Its height leaves
+// room for the app bar, the folded guide and the one-row project header above it (about 208 px), so Check scope shows
+// in the first screen at 1440×900.
 export function Conversation({ messages, clientName, client, reviewBlockedReason, locale, className = "" }: ConversationProps) {
   return (
     <section
       aria-labelledby="thread-title"
-      className={`flex flex-col overflow-hidden rounded-[10px] border border-line bg-surface lg:sticky lg:top-20 lg:max-h-[calc(100dvh-96px)] ${className}`}
+      className={`flex flex-col overflow-hidden rounded-[10px] border border-line bg-surface lg:sticky lg:top-20 lg:max-h-[max(440px,calc(100dvh-208px))] ${className}`}
     >
       <div className="flex items-baseline justify-between gap-4 border-b border-line px-5 py-3.5 sm:px-6">
         <h2 id="thread-title" className="font-display text-[17px] font-bold">

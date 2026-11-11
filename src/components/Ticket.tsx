@@ -52,7 +52,7 @@ export function Ticket({ order, finding, author, askedOn, sendBlockedReason, rea
       role="note"
       aria-labelledby={titleId(order)}
       tabIndex={-1}
-      className="ticket scroll-mt-24 scroll-ml-4"
+      className="ticket scroll-mt-24 scroll-ml-4 lg:scroll-mt-44"
       data-status={order.status}
       data-change-order-id={order.id}
       data-fx-order={order.id}

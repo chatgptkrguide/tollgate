@@ -67,12 +67,14 @@ export function revealNewTicket(before: ReadonlySet<string>): void {
 
   // The list item, not the ticket: the ticket's print animation moves it while it plays.
   const frame = ticket.closest("li") ?? ticket;
-  const bar = document.querySelector("[data-top-bar]")?.getBoundingClientRect().bottom ?? 0;
+  // The top bar and the result rail under it are both sticky; a ticket behind either is covered. The rail comes
+  // before the tickets in the page, so while it isn't stuck its bottom is above them and changes nothing.
+  const bar = Math.max(0, ...Array.from(document.querySelectorAll("[data-top-bar], [data-result-rail]"), (el) => el.getBoundingClientRect().bottom));
   const { clientWidth, clientHeight } = document.documentElement;
   if (isInView(frame.getBoundingClientRect(), { width: clientWidth, height: clientHeight, topInset: Math.max(0, bar) })) return;
 
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  // html's scroll-padding-top keeps it clear of the sticky top bar.
+  // html's scroll-padding-top and the list item's scroll margin keep it clear of the sticky top bar and rail.
   frame.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start", inline: "nearest" });
   // The ticket itself (tabIndex -1, named by its title), not its status line: a focused live region would be heard
   // on top of the Composer's result line.

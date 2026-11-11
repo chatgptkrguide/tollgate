@@ -2,7 +2,6 @@ import { ActivityPanel } from "@/components/ActivityPanel";
 import { BarrierGlyph } from "@/components/BarrierGlyph";
 import { ClientLocaleSelect } from "@/components/ClientLocaleSelect";
 import { Conversation } from "@/components/Conversation";
-import { CountingAmount } from "@/components/CountingAmount";
 import { DeliveryPanel } from "@/components/DeliveryPanel";
 import { DemoGuide, type GuideTarget } from "@/components/DemoGuide";
 import { LinkHighlighter } from "@/components/LinkHighlighter";
@@ -11,13 +10,15 @@ import { MotionDirector } from "@/components/MotionDirector";
 import { noteId } from "@/components/order-text";
 import { RefreshOnReturn } from "@/components/RefreshOnReturn";
 import { ResetDemo } from "@/components/ResetDemo";
+import { ResultRail } from "@/components/ResultRail";
 import { ScopePanel } from "@/components/ScopePanel";
 import { Ticket } from "@/components/Ticket";
+import { actionFirst } from "@/components/ticket-order";
 import type { ActivityEvent } from "@/domain/activity";
 import { isUnpaid } from "@/domain/change-order";
 import type { ChangeOrder, Finding } from "@/domain/types";
 import type { WorkspaceData } from "@/domain/workspace";
-import { formatDate, formatMoney } from "@/i18n/format";
+import { formatDate } from "@/i18n/format";
 import type { Locale } from "@/i18n/locales";
 import { LocaleSwitcher } from "@/i18n/LocaleSwitcher";
 import { t, tCount } from "@/i18n/t";
@@ -53,7 +54,6 @@ interface TicketsColumnProps {
   sendBlockedReason: string | null;
   readOnly: boolean;
   locale: Locale;
-  className?: string;
 }
 
 // The first change order the visitor can act on (draft or sent) and the message that asked for it, for the guide.
@@ -64,9 +64,10 @@ function guideTarget(data: WorkspaceData, locale: Locale): GuideTarget | null {
   return { href: `#${noteId(order)}`, author: message.author.split(" ")[0], sentOn: formatDate(locale, message.sentAt) };
 }
 
-// One ticket per marked phrase, showing its live order (or the cancelled one, until it's quoted again). Newest message
-// first, so a ticket Claude just printed lands at the top of the column. Keyed by finding: quoting a cancelled order
-// again shows a new order on the same ticket, which stays mounted so its buttons can move focus to the new status.
+// One ticket per marked phrase, showing its live order (or the cancelled one, until it's quoted again). The ones to
+// act on come first (actionFirst), and within each group the newest message, so a ticket Claude just printed lands at
+// the top of the column. Keyed by finding: quoting a cancelled order again shows a new order on the same ticket, which
+// stays mounted (and moves up with its new status) so its buttons can move focus to the new status.
 function ticketEntries(data: WorkspaceData): TicketEntry[] {
   const entries: TicketEntry[] = [];
   for (const message of [...data.messages].reverse()) {
@@ -74,7 +75,7 @@ function ticketEntries(data: WorkspaceData): TicketEntry[] {
       if (order) entries.push({ finding, order, author: message.author.split(" ")[0], askedOn: message.sentAt });
     }
   }
-  return entries;
+  return actionFirst(entries);
 }
 
 // What this render shows, for MotionDirector to compare with what the tab drew last.
@@ -133,16 +134,16 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
       />
       <ProjectHeader data={data} client={client} readOnly={previewReason !== null} locale={locale} />
 
-      {/* Tickets come first in the page, so on a phone they sit right under the total; on a wide screen they head the
-          right column and the conversation spans both rows on the left. */}
-      <main className="mx-auto grid max-w-[1280px] gap-6 px-4 pt-6 pb-16 sm:px-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-8">
-        <TicketsColumn
-          entries={ticketEntries(data)}
-          sendBlockedReason={sendBlockedReason}
-          readOnly={previewReason !== null}
-          locale={locale}
-          className="lg:col-start-2 lg:row-start-1"
-        />
+      {/* The result rail and the tickets come first in the page, so on a phone the tickets sit right under the rail's
+          one-line bar; on a wide screen they head the right column and the conversation spans both rows on the left.
+          Below 1024 px main is a flex column, not a grid, and the rail's wrapper is display: contents: a sticky grid
+          item only sticks inside its own row, and the phone bar has to stick for the whole page. On a wide screen the
+          wrapper is the rail's containing block, so the rail sticks while the tickets scroll under it. */}
+      <main className="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 pt-6 pb-16 sm:px-8 lg:grid lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-8">
+        <div className="contents lg:col-start-2 lg:row-start-1 lg:block lg:space-y-6">
+          <ResultRail data={data} locale={locale} />
+          <TicketsColumn entries={ticketEntries(data)} sendBlockedReason={sendBlockedReason} readOnly={previewReason !== null} locale={locale} />
+        </div>
         <Conversation
           messages={data.messages}
           clientName={project.clientName}
@@ -161,60 +162,38 @@ export function Workspace({ data, activity, sendBlockedReason, reviewBlockedReas
   );
 }
 
+// One row on a wide screen: who the project is for and the client's invoice language. The totals it used to carry
+// are in the result rail.
 function ProjectHeader({ data, client, readOnly, locale }: ProjectHeaderProps) {
-  const { project, totals } = data;
-  const tone = totals.hasUnpaid ? "stop" : "go";
+  const { project } = data;
 
   return (
     <section aria-labelledby="project-title" className="border-b border-line bg-surface">
-      <div className="mx-auto flex max-w-[1280px] flex-wrap items-end justify-between gap-x-10 gap-y-4 px-4 py-5 sm:px-8">
-        <div className="min-w-0">
-          <h1 id="project-title" className="font-display text-[30px] leading-tight font-extrabold tracking-[-0.015em]">{project.clientName}</h1>
-          <p className="mt-1 text-ink-2">
+      <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-x-8 gap-y-2 px-4 py-3 sm:px-8">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <h1 id="project-title" className="font-display text-[24px] leading-tight font-extrabold tracking-[-0.015em]">{project.clientName}</h1>
+          <p className="text-[15px] text-ink-2">
             {project.title} · {client} · {t(locale, "workspace.agreedOn", { date: formatDate(locale, project.agreedOn) })}
           </p>
-          <div className="mt-3">
-            <ClientLocaleSelect
-              projectId={project.id}
-              clientLocale={project.clientLocale}
-              label={t(locale, "clientLocale.label")}
-              help={t(locale, "clientLocale.help")}
-              saveFailed={t(locale, "clientLocale.saveFailed")}
-              disabled={readOnly}
-            />
-          </div>
         </div>
-        <dl className="flex flex-wrap items-end gap-x-8 gap-y-3">
-          <div>
-            <dt className="font-display text-[13px] font-bold text-ink-2">{t(locale, "workspace.agreed")}</dt>
-            {/* Bottom-aligned with the 44 px total; the 5 px lifts this 24 px figure onto the same baseline. */}
-            <dd className="mt-1.5 pb-[5px] font-display text-[24px] leading-none font-bold text-ink-2 tabular-nums">{formatMoney(locale, totals.agreedCents)}</dd>
-          </div>
-          <div data-testid="header-total" data-fx-total="" data-tone={tone}>
-            <dt className="font-display text-[13px] font-bold text-ink-2">{t(locale, "workspace.totalWithChanges")}</dt>
-            <dd className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span className={`total-figure pt-1 font-display text-[44px] leading-none font-extrabold tracking-[-0.02em] tabular-nums ${totals.hasUnpaid ? "text-ink" : "text-go"}`}>
-                <CountingAmount cents={totals.totalCents} locale={locale} />
-              </span>
-              <span className="chip">
-                <span className="lamp" aria-hidden="true" />
-                {totals.unpaidCents > 0
-                  ? t(locale, "workspace.notPaidYet", { amount: formatMoney(locale, totals.unpaidCents) })
-                  : t(locale, "workspace.allPaid")}
-              </span>
-            </dd>
-          </div>
-        </dl>
+        <ClientLocaleSelect
+          projectId={project.id}
+          clientLocale={project.clientLocale}
+          label={t(locale, "clientLocale.label")}
+          help={t(locale, "clientLocale.help")}
+          saveFailed={t(locale, "clientLocale.saveFailed")}
+          disabled={readOnly}
+        />
       </div>
     </section>
   );
 }
 
-function TicketsColumn({ entries, sendBlockedReason, readOnly, locale, className = "" }: TicketsColumnProps) {
+function TicketsColumn({ entries, sendBlockedReason, readOnly, locale }: TicketsColumnProps) {
   const open = entries.filter((e) => isUnpaid(e.order)).length;
 
   return (
-    <section aria-labelledby="tickets-title" className={`min-w-0 ${className}`}>
+    <section aria-labelledby="tickets-title" className="min-w-0">
       <div className="flex items-baseline justify-between gap-4">
         <h2 id="tickets-title" className="font-display text-[20px] leading-tight font-bold">
           {t(locale, "tickets.title")}
@@ -232,7 +211,7 @@ function TicketsColumn({ entries, sendBlockedReason, readOnly, locale, className
       ) : (
         <ol className="ticket-row -mx-4 -mt-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pt-0 pb-3 sm:-mx-8 sm:px-8 lg:mx-0 lg:flex-col lg:gap-4 lg:overflow-visible lg:px-2 lg:pb-0">
           {entries.map((e) => (
-            <li key={e.finding.id} className="w-[min(360px,calc(100vw-56px))] shrink-0 snap-start lg:w-auto">
+            <li key={e.finding.id} className="w-[min(360px,calc(100vw-56px))] shrink-0 snap-start scroll-mt-12 lg:w-auto lg:scroll-mt-40">
               <Ticket order={e.order} finding={e.finding} author={e.author} askedOn={e.askedOn} sendBlockedReason={sendBlockedReason} readOnly={readOnly} locale={locale} />
             </li>
           ))}
