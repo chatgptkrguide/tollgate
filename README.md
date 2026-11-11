@@ -2,13 +2,9 @@
 
 Catch scope creep in client messages and bill it with a PayPal invoice before you do the extra work.
 
-**Live demo:** https://tollgate-ratq.onrender.com (PayPal sandbox only)
+**[Live demo](https://tollgate-ratq.onrender.com)** (PayPal sandbox only; the free server sleeps after 15 idle minutes and a scheduled ping keeps it awake, but if it has gone to sleep the first visit can take about one minute) · **Demo video:** (YouTube link added at submission) · Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (2026)
 
-**Demo video:** (YouTube link added at submission)
-
-The demo runs on a free server that sleeps after 15 idle minutes; a scheduled ping keeps it awake, but if it has gone to sleep the first visit can take about one minute. After that it is fast.
-
-Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (2026).
+Claude flags the extra work in a client message; Tollgate bills it as a PayPal invoice, and the work stays locked in your delivery plan until PayPal confirms payment.
 
 ![Tollgate workspace: the client conversation with a marked request, its change order as a toll ticket, and the total with what is not paid yet](docs/images/screen-ticket-desktop.png)
 
@@ -16,11 +12,12 @@ Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (202
 
 Freelancers who work with overseas clients agree on a scope, then the requests keep coming in chat and email: "could you also add...". Each one feels too small to price, so the extra work goes unpaid, and asking for money later feels awkward. Getting paid in USD from abroad is its own chore.
 
-Getting paid is a real problem for freelancers. In the Freelancers Union study [The Costs of Nonpayment](https://onlabor.org/wp-content/uploads/2017/05/FU_NonpaymentReport_r3.pdf) (5,358 U.S. freelancers surveyed in July 2015), one in two had trouble getting paid in 2014, and 71% had trouble collecting at some point in their career. Freelancers lost an average of $5,968 in unpaid income in 2014, which the report puts at 13% of the average respondent's annual income.
+Evidence that unpaid work is common (these studies measure unpaid and late payment in general, not scope creep specifically):
 
-The group is large: the Upwork Research Institute's Future Workforce Index (press release on upwork.com, April 23, 2025; 3,000 U.S. skilled knowledge workers) found that 28% of them freelance, more than 20 million people.
+- Freelancers Union, [The Costs of Nonpayment](https://onlabor.org/wp-content/uploads/2017/05/FU_NonpaymentReport_r3.pdf) (5,358 U.S. freelancers surveyed in July 2015): one in two had trouble getting paid in 2014, and 71% had trouble collecting at some point in their career; freelancers lost an average of $5,968 in unpaid income in 2014, which the report puts at 13% of the average respondent's annual income.
+- Upwork Research Institute, Future Workforce Index (press release on upwork.com, April 23, 2025; 3,000 U.S. skilled knowledge workers): 28% of them freelance, more than 20 million people.
 
-These studies measure unpaid and late payment in general. They do not measure scope creep on its own, and we found no reliable recent number for it, so we do not claim one.
+We found no reliable recent number for scope creep on its own, so we do not claim one.
 
 ## What it does
 
@@ -32,18 +29,25 @@ These studies measure unpaid and late payment in general. They do not measure sc
 
 The agent proposes; nothing is billed until you approve it. Every step Claude and the app take is written to an activity panel next to the workspace, including what was sent to PayPal.
 
+<details>
+<summary>Locked vs. unlocked, and languages</summary>
+
 "Locked" is the freelancer's delivery plan, not a technical block: Tollgate does not hold or withhold any files. The Delivery panel shows each change order as locked ("starts when paid", striped, orange-red) or unlocked (green once paid, grey when you include it at no charge), and the launch date only moves for work the client has paid for or that you chose to include for free.
 
 Languages: the screen reads in English, Korean, Japanese, Spanish or Portuguese (English by default; pick another in the top bar), and each project has a client language that new PayPal invoices are written in. Amounts stay in USD; the client's messages stay as they were written.
+
+</details>
 
 ## Try it
 
 **Testing for judges:** everything below runs on the live demo with no sign-up, in the same order as the demo video. The only private detail, a PayPal sandbox buyer login for step 4, is in the testing-instructions field of our Devpost submission; step 4 also works without it.
 
-1. Open the [live demo](https://tollgate-ratq.onrender.com). Each visitor gets a private sandbox copy of a demo project, so you can't break anyone else's. **Reset demo** puts your copy back. If too many new demos were started recently (10 from one address in an hour, or 500 on the server in a day), a new visitor sees the demo read-only and nothing is saved until then.
+1. Open the [live demo](https://tollgate-ratq.onrender.com). Each visitor gets a private sandbox copy of a demo project, so you can't break anyone else's. **Reset demo** puts your copy back. (Limits: 10 new demos per address per hour, 500 on the server a day; beyond that a new visitor sees the demo read-only and nothing is saved.)
 2. **Claude checks a message.** Paste a new client message into the message box (or press **Use a sample message**), then press **Check scope**. Claude marks the phrases the agreed scope doesn't cover and prints a ticket with its hours; the app prices it from the hourly rate. Claude's estimate can differ from run to run. Nothing is sent yet. Each copy can run 10 checks a day.
 3. **Send the change order.** On that ticket (or the loyalty page ticket already in the demo), press **Send change order**. Tollgate creates and sends a PayPal sandbox invoice. One copy can send up to 20 invoices per 24 hours.
-4. **Pay it as the client.** Press **Open the client's PayPal page** on the ticket and pay with a PayPal sandbox personal (buyer) account. The credentials are not in this repository. **No buyer login?** Press **Simulate the client's payment** (marked Sandbox) instead. It records the payment on the invoice through PayPal's API in the sandbox, the same call our demo video uses; it does not mark anything paid itself, so the page still waits for PayPal's signed webhook (usually under a minute) and turns Paid without a reload. Each copy can simulate 5 payments per 24 hours.
+4. **Pay it as the client.** Press **Open the client's PayPal page** on the ticket and pay with a PayPal sandbox personal (buyer) account. The credentials are not in this repository.
+   - **No buyer login?** Press **Simulate the client's payment** (marked Sandbox) instead. It records the payment on the invoice through PayPal's API in the sandbox, the same call our demo video uses.
+   - It does not mark anything paid itself: the page waits for PayPal's signed webhook (usually under a minute) and turns Paid without a reload. Each copy can simulate 5 payments per 24 hours.
 5. **Back in Tollgate:** the ticket shows **Paid**, its gate lifts, and the Delivery panel unlocks the work and moves the launch date. The project total turns green only when nothing is left unpaid (send and pay the other ticket too, or include it at no charge). If the webhook is late, press **Check payment**.
 
 ![Claude marking "add a blog so we can post seasonal drinks" in a new client message on the live demo](docs/images/screen-claude-review-live.png)
@@ -62,8 +66,12 @@ All calls are sandbox REST calls made by the server, from a button the freelance
 
 ## How Claude is used
 
-Claude Opus 5.5 (`claude-opus-5-5`, through the Anthropic API) reviews each new client message against the agreed scope and returns structured findings: the exact quote, a title, an hours estimate and a reason. The app checks that each quote really appears in the message, then computes the price itself (hours x hourly rate). The person decides what to send. Claude does not set prices, create or send invoices, or call PayPal.
-Calls are capped: 10 reviews per demo copy per day, and 10 a minute and 100 a day across the server; the counts live in the database, so resetting a copy does not refill them. Locally, a set of six test messages passes (`pnpm eval:review`). Claude Code also helped build this project; see [Built with AI tools](#built-with-ai-tools).
+Claude Opus 5.5 (`claude-opus-5-5`, through the Anthropic API) reviews each new client message against the agreed scope.
+
+- **Returns:** structured findings (exact quote, title, hours estimate, reason). The app checks that each quote really appears in the message, then computes the price itself (hours x hourly rate).
+- **Never does:** set prices, create or send invoices, or call PayPal. The person decides what to send.
+- **Caps:** 10 reviews per demo copy per day, and 10 a minute and 100 a day across the server; the counts live in the database, so resetting a copy does not refill them.
+- **Eval:** locally, a set of six test messages passes (`pnpm eval:review`). Claude Code also helped build this project; see [Built with AI tools](#built-with-ai-tools).
 
 ## Architecture in brief
 
