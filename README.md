@@ -2,7 +2,7 @@
 
 Catch scope creep in client messages and bill it with a PayPal invoice before you do the extra work.
 
-**[Live demo](https://tollgate-ratq.onrender.com)** (PayPal sandbox only; the free server sleeps after 15 idle minutes and a scheduled ping keeps it awake, but if it has gone to sleep the first visit can take about one minute) · **Demo video:** (YouTube link added at submission) · Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (2026)
+**[Live demo](https://tollgate-ratq.onrender.com)** (PayPal sandbox only; the free server sleeps after 15 idle minutes and a scheduled ping keeps it awake, but if it has gone to sleep the first visit can take about one minute) · **[Demo video](https://youtu.be/kIbgNBacUOI)** (2:34) · Built for the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/) (2026)
 
 Claude flags the extra work in a client message; Tollgate bills it as a PayPal invoice, and the work stays locked in your delivery plan until PayPal confirms payment.
 
