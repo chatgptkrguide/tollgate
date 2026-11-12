@@ -43,3 +43,23 @@ test("보안 헤더 아래에서도 글꼴 미리 불러오기가 남고, 화면
   expect(await page.evaluate(async () => (await document.fonts.ready).status)).toBe("loaded");
   expect(refused).toEqual([]);
 });
+
+test("브랜드 아이콘·링크 미리보기 그림·매니페스트가 열리고, 첫 화면 head가 그것들을 가리킨다", async ({ page, request }) => {
+  for (const [path, type] of [
+    ["/favicon.ico", "image/x-icon"],
+    ["/icon.svg", "image/svg+xml"],
+    ["/apple-icon.png", "image/png"],
+    ["/opengraph-image.png", "image/png"],
+    ["/manifest.webmanifest", "application/manifest+json"],
+  ] as const) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(200);
+    expect(response.headers()["content-type"], path).toContain(type);
+  }
+
+  await page.goto("/");
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="manifest"]')).toHaveCount(1);
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", /\/opengraph-image\.png/);
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#12161f");
+});
