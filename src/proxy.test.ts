@@ -92,5 +92,8 @@ describe("방문자 쿠키 발급(proxy)", () => {
     expect(matches("/_next/static/x.js")).toBe(false);
     expect(matches("/favicon.ico")).toBe(false);
     expect(matches("/icon.svg")).toBe(false);
+    expect(matches("/apple-icon.png")).toBe(false);
+    expect(matches("/opengraph-image.png")).toBe(false);
+    expect(matches("/manifest.webmanifest")).toBe(false);
   });
 });

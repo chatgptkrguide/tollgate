@@ -1,0 +1,1 @@
+Tollgate: extra work stays locked until PayPal says it's paid. A ticket marked invoice sent, not paid, with a lowered gate, and the same ticket paid, with the gate raised.

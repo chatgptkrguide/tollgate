@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Overpass, Overpass_Mono, Public_Sans } from "next/font/google";
 import { Suspense, type ReactElement } from "react";
 import { DocumentLang } from "@/i18n/DocumentLang";
@@ -23,11 +23,22 @@ const publicSans = Public_Sans({
   subsets: ["latin"],
 });
 
+// Render sets RENDER_EXTERNAL_URL; it makes the Open Graph image URL absolute for link previews.
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.RENDER_EXTERNAL_URL ?? "http://localhost:3000"),
   title: "Tollgate",
   description:
     "Catch scope creep in client messages and bill it with PayPal before you do the extra work.",
+  openGraph: {
+    title: "Tollgate: extra work stays locked until PayPal says it's paid",
+    description: "Claude flags out-of-scope client requests, PayPal bills them, and a signed webhook unlocks the work.",
+    siteName: "Tollgate",
+    type: "website",
+  },
+  twitter: { card: "summary_large_image" },
 };
+
+export const viewport: Viewport = { themeColor: "#12161f" };
 
 // The static shell says English; DocumentLang corrects it to the request's language (the visitor's choice, else English).
 // suppressHydrationWarning: the attribute it changes before React hydrates.

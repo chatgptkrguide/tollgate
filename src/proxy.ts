@@ -23,5 +23,5 @@ export function proxy(request: NextRequest): NextResponse {
 
 export const config = {
   // Webhooks, health checks and static files never get a cookie.
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|icon.svg|robots.txt|sitemap.xml).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|opengraph-image.png|manifest.webmanifest|robots.txt|sitemap.xml).*)"],
 };
